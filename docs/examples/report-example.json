@@ -1,0 +1,38 @@
+{
+  "runId": "36fa5e92-6355-4d5a-a9a2-bd55f4868682",
+  "generatedAt": "2026-05-01T17:00:00.000Z",
+  "overview": {
+    "title": "System overview",
+    "summary": "Discovered 4 pages and generated 13 candidate test cases.",
+    "details": [
+      "Base URL: https://example.com",
+      "Network observations captured: 9",
+      "Backend validation provided: yes"
+    ]
+  },
+  "issues": {
+    "title": "Findings and risks",
+    "summary": "Crawler warnings were detected.",
+    "details": [
+      "Failed to crawl https://example.com/profile: Timeout 20000ms exceeded",
+      "Frontend issued network requests that should be cross-checked against backend routes."
+    ]
+  },
+  "performance": {
+    "title": "Performance and load test outlook",
+    "summary": "Load testing is not executed in the initial crawler pass, but candidate targets were identified.",
+    "details": [
+      "GET https://example.com/api/session [200]",
+      "POST https://example.com/api/login [401]"
+    ]
+  },
+  "mermaidFlowchart": "flowchart TD\n  A[\"https://example.com/\"] -->|\"Login\"| B[\"https://example.com/login\"]",
+  "pdfOutline": [
+    "1. Executive summary",
+    "2. Frontend inventory and user flows",
+    "3. Generated test matrix",
+    "4. Backend validation and API mapping",
+    "5. Failures, risks, and recommendations",
+    "6. Performance and load testing insights"
+  ]
+}
