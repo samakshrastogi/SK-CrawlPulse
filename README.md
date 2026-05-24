@@ -178,42 +178,6 @@ flowchart LR
   J --> B
 ```
 
-## Local setup
-
-### Prerequisites
-
-- Node.js and npm
-- MongoDB reachable through a connection string
-- A Chromium-compatible browser available for Playwright
-
-### Install
-
-```bash
-cd backend
-npm install
-
-cd ../frontend
-npm install
-```
-
-### Run in development
-
-Terminal 1:
-
-```bash
-cd backend
-npm run dev
-```
-
-Terminal 2:
-
-```bash
-cd frontend
-npm run dev
-```
-
-Then open the Vite app URL shown by the frontend dev server, usually `http://localhost:5173`.
-
 ## Output and stored artifacts
 
 The platform produces:
