@@ -9,6 +9,11 @@ import {
   startPlatformAnalysis,
   streamPlatformAnalysisRun,
 } from "../modules/platform/analysisService";
+import {
+  buildPlaywrightSpecExport,
+  buildRunHtmlReport,
+  buildRunJsonExport,
+} from "../modules/reporting/exportBuilder";
 import type { AnalysisRequest, LoginPromptAction } from "../types/platform";
 
 export const analysisRouter = Router();
@@ -81,6 +86,51 @@ analysisRouter.get("/runs/:runId", async (req, res, next) => {
     }
 
     res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+analysisRouter.get("/runs/:runId/export/html", async (req, res, next) => {
+  try {
+    const run = await getPlatformAnalysisRun(req.params.runId);
+    if (!run) {
+      throw new HttpError(404, "run not found");
+    }
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="sk-crawlpulse-${run.runId}.html"`);
+    res.status(200).send(buildRunHtmlReport(run));
+  } catch (error) {
+    next(error);
+  }
+});
+
+analysisRouter.get("/runs/:runId/export/json", async (req, res, next) => {
+  try {
+    const run = await getPlatformAnalysisRun(req.params.runId);
+    if (!run) {
+      throw new HttpError(404, "run not found");
+    }
+
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="sk-crawlpulse-${run.runId}.json"`);
+    res.status(200).send(buildRunJsonExport(run));
+  } catch (error) {
+    next(error);
+  }
+});
+
+analysisRouter.get("/runs/:runId/export/playwright", async (req, res, next) => {
+  try {
+    const run = await getPlatformAnalysisRun(req.params.runId);
+    if (!run) {
+      throw new HttpError(404, "run not found");
+    }
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="sk-crawlpulse-${run.runId}.spec.ts"`);
+    res.status(200).send(buildPlaywrightSpecExport(run));
   } catch (error) {
     next(error);
   }

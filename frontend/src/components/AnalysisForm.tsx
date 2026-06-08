@@ -1,9 +1,11 @@
 import type { FormEvent } from "react";
+import type { AnalysisOptions } from "../types/analysis";
 
 type AnalysisFormProps = {
   targetUrl: string;
   repoUrl: string;
   uploadedPath: string;
+  analysisOptions: AnalysisOptions;
   loading: boolean;
   error: string;
   urlError: string;
@@ -11,6 +13,7 @@ type AnalysisFormProps = {
   onTargetUrlChange: (value: string) => void;
   onRepoUrlChange: (value: string) => void;
   onUploadedPathChange: (value: string) => void;
+  onAnalysisOptionsChange: (value: AnalysisOptions) => void;
 };
 
 const inputClassName =
@@ -22,6 +25,7 @@ export function AnalysisForm({
   targetUrl,
   repoUrl,
   uploadedPath,
+  analysisOptions,
   loading,
   error,
   urlError,
@@ -29,7 +33,29 @@ export function AnalysisForm({
   onTargetUrlChange,
   onRepoUrlChange,
   onUploadedPathChange,
+  onAnalysisOptionsChange,
 }: AnalysisFormProps) {
+  const updateOptions = (next: Partial<AnalysisOptions>) => {
+    onAnalysisOptionsChange({
+      ...analysisOptions,
+      ...next,
+    });
+  };
+
+  const updateNumberOption = (key: keyof Pick<AnalysisOptions, "maxPages" | "maxLinksPerPage" | "maxDepth" | "maxInteractionsPerPage">, value: string) => {
+    const parsed = Number(value);
+    updateOptions({ [key]: Number.isFinite(parsed) ? Math.max(1, parsed) : 1 });
+  };
+
+  const updatePatternList = (key: keyof Pick<AnalysisOptions, "domainAllowlist" | "excludePathPatterns">, value: string) => {
+    updateOptions({
+      [key]: value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    });
+  };
+
   return (
     <form
       onSubmit={onSubmit}
@@ -83,6 +109,104 @@ export function AnalysisForm({
         </div>
       </div>
 
+      <details className="mt-3 rounded-[1.1rem] border border-white/10 bg-slate-950/45 px-4 py-3">
+        <summary className="cursor-pointer text-[11px] uppercase tracking-[0.2em] text-cyan-300">
+          Scan configuration
+        </summary>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-4">
+          <label className="block">
+            <span className={fieldLabelClassName}>Crawl profile</span>
+            <select
+              className={inputClassName}
+              value={analysisOptions.crawlProfile ?? "auto"}
+              onChange={(event) => updateOptions({ crawlProfile: event.target.value as AnalysisOptions["crawlProfile"] })}
+            >
+              <option value="auto">Auto</option>
+              <option value="generic">Generic</option>
+              <option value="youtube">YouTube</option>
+              <option value="ecommerce">Ecommerce</option>
+              <option value="dashboard">Dashboard</option>
+              <option value="auth-heavy">Auth-heavy</option>
+            </select>
+          </label>
+
+          <NumberField
+            label="Max pages"
+            value={analysisOptions.maxPages}
+            onChange={(value) => updateNumberOption("maxPages", value)}
+          />
+          <NumberField
+            label="Max depth"
+            value={analysisOptions.maxDepth}
+            onChange={(value) => updateNumberOption("maxDepth", value)}
+          />
+          <NumberField
+            label="Interactions/page"
+            value={analysisOptions.maxInteractionsPerPage}
+            onChange={(value) => updateNumberOption("maxInteractionsPerPage", value)}
+          />
+          <NumberField
+            label="Links/page"
+            value={analysisOptions.maxLinksPerPage}
+            onChange={(value) => updateNumberOption("maxLinksPerPage", value)}
+          />
+
+          <label className="block lg:col-span-2">
+            <span className={fieldLabelClassName}>Domain allowlist</span>
+            <input
+              className={inputClassName}
+              value={(analysisOptions.domainAllowlist ?? []).join(", ")}
+              onChange={(event) => updatePatternList("domainAllowlist", event.target.value)}
+              placeholder="example.com, docs.example.com"
+              autoComplete="off"
+            />
+          </label>
+
+          <label className="block lg:col-span-2">
+            <span className={fieldLabelClassName}>Exclude paths</span>
+            <input
+              className={inputClassName}
+              value={(analysisOptions.excludePathPatterns ?? []).join(", ")}
+              onChange={(event) => updatePatternList("excludePathPatterns", event.target.value)}
+              placeholder="logout, delete, /admin/private"
+              autoComplete="off"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <ToggleField
+            label="Respect robots.txt"
+            checked={analysisOptions.respectRobotsTxt !== false}
+            onChange={(checked) => updateOptions({ respectRobotsTxt: checked })}
+          />
+          <ToggleField
+            label="Stream previews"
+            checked={analysisOptions.streamHtmlPreview !== false}
+            onChange={(checked) => updateOptions({ streamHtmlPreview: checked })}
+          />
+          <ToggleField
+            label="Strict behavior"
+            checked={analysisOptions.strictBehaviorMode === true}
+            onChange={(checked) => updateOptions({ strictBehaviorMode: checked })}
+          />
+          <ToggleField
+            label="Prompt for login"
+            checked={analysisOptions.promptForLogin === true}
+            onChange={(checked) =>
+              updateOptions({
+                promptForLogin: checked,
+                loginPrompt: {
+                  ...analysisOptions.loginPrompt,
+                  enabled: checked,
+                },
+              })
+            }
+          />
+        </div>
+      </details>
+
       {urlError ? (
         <div className="mt-3 rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
           {urlError}
@@ -95,5 +219,34 @@ export function AnalysisForm({
         </div>
       ) : null}
     </form>
+  );
+}
+
+function NumberField({ label, value, onChange }: { label: string; value?: number; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className={fieldLabelClassName}>{label}</span>
+      <input
+        className={inputClassName}
+        type="number"
+        min={1}
+        value={value ?? 1}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function ToggleField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-slate-200">
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 accent-cyan-300"
+      />
+    </label>
   );
 }

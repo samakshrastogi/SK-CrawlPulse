@@ -92,6 +92,7 @@ export function TestsView({ result, filters }: TestsViewProps) {
 
   const activeTest = visibleTests[Math.min(testIndex, visibleTests.length - 1)];
   const focusMessage = buildFocusMessage(summary);
+  const exportBaseUrl = result ? `${runtime.apiBaseUrl}${runtime.analysisApiPath}/runs/${result.runId}/export` : "";
   const evidenceItems = Array.from(
     new Set(
       [activeTest.issueSummary, ...(activeTest.evidenceItems ?? [])].filter(
@@ -108,11 +109,19 @@ export function TestsView({ result, filters }: TestsViewProps) {
             <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Tests overview</p>
             <h2 className="mt-3 text-2xl font-semibold text-white">What this run covered and where it broke</h2>
           </div>
-          <div className="rounded-2xl border border-amber-300/18 bg-amber-400/8 px-4 py-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-amber-200">Current slice</p>
-            <p className="mt-2 text-sm text-slate-200">
-              {filters.route === "all" ? "All routes" : filters.route} • {filters.status === "all" ? "All status" : filters.status}
-            </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <a
+              href={`${exportBaseUrl}/playwright`}
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100 hover:bg-cyan-400/15"
+            >
+              Export Playwright spec
+            </a>
+            <div className="rounded-2xl border border-amber-300/18 bg-amber-400/8 px-4 py-4">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-amber-200">Current slice</p>
+              <p className="mt-2 text-sm text-slate-200">
+                {filters.route === "all" ? "All routes" : filters.route} • {filters.status === "all" ? "All status" : filters.status}
+              </p>
+            </div>
           </div>
         </div>
 

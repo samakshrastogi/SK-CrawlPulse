@@ -200,6 +200,8 @@ export type AnalysisSubmission = {
   };
 };
 
+export type AnalysisOptions = AnalysisSubmission["options"];
+
 export type SavedProject = {
   id: string;
   name: string;

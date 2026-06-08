@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { runtime } from "../config/runtime";
 import { getFindingMeta, getSeverityMeaning } from "../data/findingMeta";
 import { EmptyStatePanel } from "./EmptyStatePanel";
@@ -9,10 +9,14 @@ type FindingsViewProps = {
   filters: GlobalFilters;
 };
 
+type TriageStatus = "open" | "acknowledged" | "ignored" | "fixed";
+const TRIAGE_KEY_PREFIX = "sk-crawlpulse:finding-triage";
+
 export function FindingsView({ result, filters }: FindingsViewProps) {
   const [groupBy, setGroupBy] = useState<"priority" | "route" | "type">("priority");
   const [showGlossary, setShowGlossary] = useState(false);
   const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
+  const [triage, setTriage] = useState<Record<string, TriageStatus>>({});
   const apiBaseUrl = runtime.apiBaseUrl;
   const findings = result?.frontend.runtimeFindings ?? [];
   const pages = result?.frontend.pages ?? [];
@@ -29,6 +33,35 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
     [filters.issueType, filters.route, filters.severity, findings],
   );
 
+  useEffect(() => {
+    if (!result?.runId) {
+      setTriage({});
+      return;
+    }
+
+    const key = `${TRIAGE_KEY_PREFIX}:${result.runId}`;
+    const stored = window.localStorage.getItem(key);
+    if (!stored) {
+      setTriage({});
+      return;
+    }
+
+    try {
+      setTriage(JSON.parse(stored) as Record<string, TriageStatus>);
+    } catch {
+      window.localStorage.removeItem(key);
+      setTriage({});
+    }
+  }, [result?.runId]);
+
+  useEffect(() => {
+    if (!result?.runId) {
+      return;
+    }
+
+    window.localStorage.setItem(`${TRIAGE_KEY_PREFIX}:${result.runId}`, JSON.stringify(triage));
+  }, [result?.runId, triage]);
+
   const severityCounts = useMemo(
     () => ({
       high: filteredFindings.filter((finding) => finding.severity === "high").length,
@@ -38,11 +71,25 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
     [filteredFindings],
   );
 
-  const topRoute = useMemo(() => getTopGroup(filteredFindings, (finding) => toRoute(finding.pageUrl)), [filteredFindings]);
   const topType = useMemo(
     () => getTopGroup(filteredFindings, (finding) => getFindingMeta(finding.type).label),
     [filteredFindings],
   );
+
+  const triageCounts = useMemo(() => {
+    const counts: Record<TriageStatus, number> = {
+      open: 0,
+      acknowledged: 0,
+      ignored: 0,
+      fixed: 0,
+    };
+
+    filteredFindings.forEach((finding) => {
+      counts[triage[finding.findingId] ?? "open"] += 1;
+    });
+
+    return counts;
+  }, [filteredFindings, triage]);
 
   const recommendedFocus = useMemo(() => {
     const highPriority = filteredFindings.filter((finding) => toPriorityBucket(finding.severity) === "Needs attention now");
@@ -95,7 +142,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
       <div className="grid gap-4 lg:grid-cols-4">
         <SummaryCard label="Visible findings" value={String(filteredFindings.length)} detail="After current filters" />
         <SummaryCard label="High severity" value={String(severityCounts.high)} detail="Needs attention now" />
-        <SummaryCard label="Top route" value={topRoute?.label ?? "--"} detail={topRoute ? `${topRoute.count} finding${topRoute.count === 1 ? "" : "s"}` : "No route concentration"} />
+        <SummaryCard label="Triage open" value={String(triageCounts.open)} detail={`${triageCounts.acknowledged} acknowledged / ${triageCounts.fixed} fixed`} />
         <SummaryCard label="Top issue type" value={topType?.label ?? "--"} detail={topType ? `${topType.count} finding${topType.count === 1 ? "" : "s"}` : "No type concentration"} />
       </div>
 
@@ -168,6 +215,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
               const interaction = interactions.find((item) => item.buttonId === finding.relatedInteractionId);
               const page = pages.find((item) => item.url === finding.pageUrl);
               const isExpanded = Boolean(expandedFindings[finding.findingId]);
+              const triageStatus = triage[finding.findingId] ?? "open";
               const evidencePreview = finding.evidence[0];
               const extraEvidenceCount = Math.max(0, finding.evidence.length - 1);
               const smartSummary = toSmartSummary({
@@ -216,6 +264,31 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
                           label="Next step"
                           value={interaction?.selector ? `Inspect ${interaction.selector} and the surrounding flow.` : meta.suggestions[0]}
                         />
+                      </div>
+
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <p className="enterprise-label">Triage</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(["open", "acknowledged", "ignored", "fixed"] as TriageStatus[]).map((status) => (
+                            <button
+                              key={status}
+                              type="button"
+                              onClick={() =>
+                                setTriage((current) => ({
+                                  ...current,
+                                  [finding.findingId]: status,
+                                }))
+                              }
+                              className={`rounded-full border px-3 py-1.5 text-xs capitalize ${
+                                triageStatus === status
+                                  ? triageTone(status)
+                                  : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-cyan-50"
+                              }`}
+                            >
+                              {status}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       <div className="mt-4 lg:hidden">
@@ -283,6 +356,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
                       <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                         <Badge value={finding.severity} tone={finding.severity} />
                         <Badge value={meta.label} />
+                        <Badge value={triageStatus} tone={triageStatus} />
                       </div>
                       <button
                         type="button"
@@ -352,11 +426,32 @@ function Badge({ value, tone }: { value: string; tone?: string }) {
         ? "border-amber-200 bg-amber-50 text-amber-700"
       : tone === "low"
           ? "border-blue-200 bg-blue-50 text-blue-700"
-          : tone === "info"
+      : tone === "info"
             ? "border-slate-200 bg-slate-50 text-slate-600"
+            : tone === "open"
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : tone === "acknowledged"
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : tone === "ignored"
+                  ? "border-slate-200 bg-slate-100 text-slate-600"
+                  : tone === "fixed"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
             : "border-slate-200 bg-white text-slate-600";
 
   return <span className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize ${color}`}>{value}</span>;
+}
+
+function triageTone(status: TriageStatus) {
+  switch (status) {
+    case "fixed":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "ignored":
+      return "border-slate-200 bg-slate-100 text-slate-600";
+    case "acknowledged":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-rose-200 bg-rose-50 text-rose-700";
+  }
 }
 
 function toRoute(value: string) {

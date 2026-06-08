@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { runtime } from "../config/runtime";
 import { EmptyStatePanel } from "./EmptyStatePanel";
 import type { AnalysisResponse, GlobalFilters } from "../types/analysis";
 
@@ -131,13 +132,24 @@ export function ReportView({ result, filters }: ReportViewProps) {
     failingAssertions,
     mismatchedEndpoints,
   });
+  const qualityGate = buildQualityGate(result);
+  const exportBaseUrl = `${runtime.apiBaseUrl}${runtime.analysisApiPath}/runs/${result.runId}/export`;
 
   return (
     <section className="min-w-0 grid gap-4">
       <article className="min-w-0 grid gap-4 rounded-[1.8rem] border border-white/10 bg-slate-900/72 p-5 sm:p-5 fade-in-up">
         <div className="rounded-2xl border border-cyan-300/12 bg-[linear-gradient(135deg,rgba(8,47,73,0.65)_0%,rgba(15,23,42,0.88)_100%)] p-4">
-          <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Report</p>
-          <h2 className="mt-3 break-words text-2xl font-semibold text-white">Interpreted scan report</h2>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Report</p>
+              <h2 className="mt-3 break-words text-2xl font-semibold text-white">Interpreted scan report</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <ExportButton href={`${exportBaseUrl}/html`} label="HTML report" />
+              <ExportButton href={`${exportBaseUrl}/json`} label="JSON package" />
+              <ExportButton href={`${exportBaseUrl}/playwright`} label="Playwright spec" />
+            </div>
+          </div>
           <p className="mt-3 max-w-4xl break-words text-sm leading-7 text-slate-300">{executiveSummary}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {sections.map(({ key, label }) => (
@@ -156,6 +168,7 @@ export function ReportView({ result, filters }: ReportViewProps) {
         </div>
 
         <div className="grid gap-3 lg:grid-cols-4">
+          <ReportStat label="Quality gate" value={qualityGate.label} />
           <ReportStat label="Confidence" value={confidence.level} />
           <ReportStat
             label="Highest-risk route"
@@ -164,10 +177,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
           <ReportStat
             label="Dominant issue type"
             value={dominantType?.label ?? "--"}
-          />
-          <ReportStat
-            label="Backend correlation"
-            value={result.backendValidation.provided ? "Linked" : "None"}
           />
         </div>
 
@@ -200,6 +209,7 @@ export function ReportView({ result, filters }: ReportViewProps) {
                   text={recommendations[0] ?? "No urgent next action was inferred from the current report slice."}
                 />
               </div>
+              <DetailList title={`Quality gate: ${qualityGate.label}`} items={qualityGate.reasons} />
               {result.report.overview?.details?.length ? (
                 <DetailList title={result.report.overview.title} items={result.report.overview.details.slice(0, 6)} />
               ) : null}
@@ -498,6 +508,17 @@ function ReportStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ExportButton({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      className="tab-motion rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100 hover:bg-cyan-400/15"
+    >
+      {label}
+    </a>
+  );
+}
+
 function InsightCard({ title, text }: { title: string; text: string }) {
   return (
     <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
@@ -736,6 +757,25 @@ function deriveConfidence(result: AnalysisResponse) {
     level: "Low",
     summary: "The report is directionally useful, but it should be treated as partial evidence until coverage deepens.",
     reasons,
+  };
+}
+
+function buildQualityGate(result: AnalysisResponse) {
+  const highFindings = result.frontend.runtimeFindings.filter((finding) => finding.severity === "high").length;
+  const failedInteractions = result.frontend.coverageReport.failed;
+  const coverage = Number.parseInt(result.frontend.coverageReport.coverage, 10) || 0;
+  const reasons = [
+    highFindings > 0 ? `${highFindings} high-severity finding${highFindings === 1 ? "" : "s"} detected.` : null,
+    failedInteractions > 0 ? `${failedInteractions} failed interaction check${failedInteractions === 1 ? "" : "s"} detected.` : null,
+    coverage < 80 ? `Coverage is ${coverage}%, below the recommended 80% gate.` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    label: reasons.length > 0 ? "Needs review" : "Passed",
+    reasons:
+      reasons.length > 0
+        ? reasons
+        : ["No high-severity findings, failed interactions, or low coverage gate failures."],
   };
 }
 

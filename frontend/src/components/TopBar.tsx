@@ -1,4 +1,13 @@
-export function TopBar() {
+import type { AuthSession } from "./AuthPage";
+
+type TopBarProps = {
+  user: AuthSession;
+  onSignOut: () => void;
+};
+
+export function TopBar({ user, onSignOut }: TopBarProps) {
+  const initial = (user.name || user.email).charAt(0).toUpperCase();
+
   return (
     <header className="app-navbar-shell premium-header glass-surface glass-hover hidden rounded-[1.5rem] px-4 py-3 md:block fade-in-up">
       <div className="flex items-center justify-between gap-4">
@@ -22,16 +31,24 @@ export function TopBar() {
               <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-cyan-300" />
             </span>
           </button>
-          <button
-            type="button"
-            className="control-surface tab-motion flex h-9 items-center gap-2 rounded-full pl-1.5 pr-3 text-slate-200 transition hover:bg-white/[0.08]"
-            aria-label="Profile"
-          >
+          <div className="control-surface flex min-h-9 items-center gap-2 rounded-full py-1 pl-1.5 pr-2 text-slate-200">
             <span className="profile-mark flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-white">
-              S
+              {initial}
             </span>
-            <span className="text-[12px] text-slate-300">Profile</span>
-          </button>
+            <span className="hidden max-w-[180px] truncate text-[12px] text-slate-300 lg:inline">
+              {user.name || user.email}
+            </span>
+            <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-cyan-200">
+              {user.provider}
+            </span>
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="tab-motion rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-300 hover:bg-white/10 hover:text-white"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
     </header>

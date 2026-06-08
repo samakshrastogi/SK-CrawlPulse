@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { AuthPage } from "./components/AuthPage";
 import { CompareView } from "./components/CompareView";
 import { FindingsView } from "./components/FindingsView";
 import { GlobalFilterModal } from "./components/GlobalFilterModal";
 import { HistoryView } from "./components/HistoryView";
+import { LandingPage } from "./components/LandingPage";
 import { MobileActionBar } from "./components/MobileActionBar";
 import { OverviewView } from "./components/OverviewView";
 import { PagesView } from "./components/PagesView";
@@ -14,13 +16,33 @@ import { TopBar } from "./components/TopBar";
 import { TopStatusStrip } from "./components/TopStatusStrip";
 import { ViewTabs } from "./components/ViewTabs";
 import { runtime } from "./config/runtime";
-import type { AnalysisResponse, AnalysisRun, AnalysisSubmission, AppView, GlobalFilters, SavedProject } from "./types/analysis";
+import type { AuthSession } from "./components/AuthPage";
+import type { AnalysisOptions, AnalysisResponse, AnalysisRun, AnalysisSubmission, AppView, GlobalFilters, SavedProject } from "./types/analysis";
 
 const API_BASE_URL = runtime.apiBaseUrl;
 const ANALYSIS_API_BASE_URL = `${API_BASE_URL}${runtime.analysisApiPath}`;
 const DEFAULT_ANALYSIS_OPTIONS = runtime.defaultAnalysisOptions;
 const SAVED_PROJECTS_KEY = "sk-crawlpulse:saved-projects";
 const APP_STATE_KEY = "sk-crawlpulse:app-state";
+const AUTH_SESSION_KEY = "sk-crawlpulse:auth-session";
+
+const createDefaultAnalysisOptions = (): AnalysisOptions => ({
+  maxPages: DEFAULT_ANALYSIS_OPTIONS.maxPages,
+  maxLinksPerPage: DEFAULT_ANALYSIS_OPTIONS.maxLinksPerPage,
+  maxDepth: DEFAULT_ANALYSIS_OPTIONS.maxDepth,
+  maxInteractionsPerPage: DEFAULT_ANALYSIS_OPTIONS.maxInteractionsPerPage,
+  respectRobotsTxt: DEFAULT_ANALYSIS_OPTIONS.respectRobotsTxt,
+  streamHtmlPreview: DEFAULT_ANALYSIS_OPTIONS.streamHtmlPreview,
+  crawlProfile: DEFAULT_ANALYSIS_OPTIONS.crawlProfile,
+  strictBehaviorMode: DEFAULT_ANALYSIS_OPTIONS.strictBehaviorMode,
+  promptForLogin: DEFAULT_ANALYSIS_OPTIONS.promptForLogin,
+  loginPrompt: {
+    enabled: DEFAULT_ANALYSIS_OPTIONS.loginPromptEnabled,
+    checkpointLabel: DEFAULT_ANALYSIS_OPTIONS.loginPromptLabel,
+    timeoutSeconds: DEFAULT_ANALYSIS_OPTIONS.loginPromptTimeoutSeconds,
+    autoContinueWithoutLogin: false,
+  },
+});
 
 const toProjectName = (targetUrl: string) => {
   try {
@@ -75,10 +97,47 @@ const mergeRunSnapshot = (previous: AnalysisRun | null, incoming: AnalysisRun): 
   };
 };
 
+const parseGoogleCredential = (idToken: string): Pick<AuthSession, "email" | "name"> | null => {
+  try {
+    const payload = idToken.split(".")[1];
+    if (!payload) {
+      return null;
+    }
+
+    const decoded = JSON.parse(
+      window.atob(payload.replace(/-/g, "+").replace(/_/g, "/")),
+    ) as { email?: string; name?: string };
+
+    if (!decoded.email) {
+      return null;
+    }
+
+    return {
+      email: decoded.email,
+      name: decoded.name ?? decoded.email.split("@")[0] ?? "Google user",
+    };
+  } catch {
+    return null;
+  }
+};
+
 export default function App() {
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => {
+    try {
+      const stored = window.localStorage.getItem(AUTH_SESSION_KEY);
+      return stored ? (JSON.parse(stored) as AuthSession) : null;
+    } catch {
+      window.localStorage.removeItem(AUTH_SESSION_KEY);
+      return null;
+    }
+  });
+  const [authError, setAuthError] = useState("");
+  const [showAuthPage, setShowAuthPage] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register" | "forgot" | "reset">("login");
   const [targetUrl, setTargetUrl] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [uploadedPath, setUploadedPath] = useState("");
+  const [analysisOptions, setAnalysisOptions] = useState<AnalysisOptions>(() => createDefaultAnalysisOptions());
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [currentRun, setCurrentRun] = useState<AnalysisRun | null>(null);
   const [historyRuns, setHistoryRuns] = useState<AnalysisRun[]>([]);
@@ -130,6 +189,51 @@ export default function App() {
         null;
 
   useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const idToken = hash.get("id_token");
+    if (!idToken) {
+      return;
+    }
+
+    const credential = parseGoogleCredential(idToken);
+    if (!credential) {
+      setAuthError("Google sign-in returned an unreadable token. Try again or use email login.");
+      setShowAuthPage(true);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      return;
+    }
+
+    const session: AuthSession = {
+      ...credential,
+      provider: "google",
+      createdAt: new Date().toISOString(),
+    };
+    setAuthSession(session);
+    setShowAuthPage(false);
+    window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
+
+  const authenticate = (session: AuthSession) => {
+    setAuthError("");
+    setAuthSession(session);
+    setShowAuthPage(false);
+    window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+  };
+
+  const signOut = () => {
+    setAuthSession(null);
+    window.localStorage.removeItem(AUTH_SESSION_KEY);
+    streamRef.current?.close();
+    streamRef.current = null;
+  };
+
+  const openAuth = (mode: typeof authMode) => {
+    setAuthMode(mode);
+    setShowAuthPage(true);
+  };
+
+  useEffect(() => {
     document.documentElement.dataset.theme = "light";
 
     const restoreState = async () => {
@@ -150,6 +254,7 @@ export default function App() {
             targetUrl?: string;
             repoUrl?: string;
             uploadedPath?: string;
+            analysisOptions?: AnalysisOptions;
             activeView?: AppView;
             globalFilters?: GlobalFilters;
             selectedRunId?: string | null;
@@ -158,6 +263,21 @@ export default function App() {
           setTargetUrl(parsed.targetUrl ?? "");
           setRepoUrl(parsed.repoUrl ?? "");
           setUploadedPath(parsed.uploadedPath ?? "");
+          const defaultOptions = createDefaultAnalysisOptions();
+          setAnalysisOptions({
+            ...defaultOptions,
+            ...(parsed.analysisOptions ?? {}),
+            loginPrompt: {
+              checkpointLabel: defaultOptions.loginPrompt?.checkpointLabel,
+              timeoutSeconds: defaultOptions.loginPrompt?.timeoutSeconds,
+              autoContinueWithoutLogin: defaultOptions.loginPrompt?.autoContinueWithoutLogin,
+              ...(parsed.analysisOptions?.loginPrompt ?? {}),
+              enabled:
+                parsed.analysisOptions?.loginPrompt?.enabled ??
+                defaultOptions.loginPrompt?.enabled ??
+                DEFAULT_ANALYSIS_OPTIONS.loginPromptEnabled,
+            },
+          });
           setActiveView(parsed.activeView ?? "overview");
           setGlobalFilters(
             parsed.globalFilters ?? {
@@ -211,6 +331,7 @@ export default function App() {
         targetUrl,
         repoUrl,
         uploadedPath,
+        analysisOptions,
         activeView,
         globalFilters,
         selectedRunId: currentRun?.runId ?? null,
@@ -218,6 +339,7 @@ export default function App() {
     );
   }, [
     activeView,
+    analysisOptions,
     currentRun?.runId,
     globalFilters,
     repoUrl,
@@ -379,20 +501,23 @@ export default function App() {
         uploadedPath: uploadedPath || undefined,
       },
       options: {
-        maxPages: DEFAULT_ANALYSIS_OPTIONS.maxPages,
-        maxLinksPerPage: DEFAULT_ANALYSIS_OPTIONS.maxLinksPerPage,
-        maxDepth: DEFAULT_ANALYSIS_OPTIONS.maxDepth,
-        maxInteractionsPerPage: DEFAULT_ANALYSIS_OPTIONS.maxInteractionsPerPage,
-        respectRobotsTxt: DEFAULT_ANALYSIS_OPTIONS.respectRobotsTxt,
-        streamHtmlPreview: DEFAULT_ANALYSIS_OPTIONS.streamHtmlPreview,
-        crawlProfile: DEFAULT_ANALYSIS_OPTIONS.crawlProfile,
-        strictBehaviorMode: DEFAULT_ANALYSIS_OPTIONS.strictBehaviorMode,
-        promptForLogin: DEFAULT_ANALYSIS_OPTIONS.promptForLogin,
+        maxPages: analysisOptions.maxPages,
+        maxLinksPerPage: analysisOptions.maxLinksPerPage,
+        maxDepth: analysisOptions.maxDepth,
+        maxInteractionsPerPage: analysisOptions.maxInteractionsPerPage,
+        domainAllowlist: analysisOptions.domainAllowlist,
+        excludePathPatterns: analysisOptions.excludePathPatterns,
+        respectRobotsTxt: analysisOptions.respectRobotsTxt,
+        streamHtmlPreview: analysisOptions.streamHtmlPreview,
+        crawlProfile: analysisOptions.crawlProfile,
+        strictBehaviorMode: analysisOptions.strictBehaviorMode,
+        promptForLogin: analysisOptions.promptForLogin,
         loginPrompt: {
-          enabled: DEFAULT_ANALYSIS_OPTIONS.loginPromptEnabled,
-          checkpointLabel: DEFAULT_ANALYSIS_OPTIONS.loginPromptLabel,
-          timeoutSeconds: DEFAULT_ANALYSIS_OPTIONS.loginPromptTimeoutSeconds,
-          autoContinueWithoutLogin: false,
+          ...analysisOptions.loginPrompt,
+          enabled: analysisOptions.loginPrompt?.enabled ?? DEFAULT_ANALYSIS_OPTIONS.loginPromptEnabled,
+          checkpointLabel: analysisOptions.loginPrompt?.checkpointLabel ?? DEFAULT_ANALYSIS_OPTIONS.loginPromptLabel,
+          timeoutSeconds:
+            analysisOptions.loginPrompt?.timeoutSeconds ?? DEFAULT_ANALYSIS_OPTIONS.loginPromptTimeoutSeconds,
         },
       },
     };
@@ -432,6 +557,7 @@ export default function App() {
             targetUrl={targetUrl}
             repoUrl={repoUrl}
             uploadedPath={uploadedPath}
+            analysisOptions={analysisOptions}
             loading={loading}
             error={error}
             urlError={urlError}
@@ -446,6 +572,7 @@ export default function App() {
             }}
             onRepoUrlChange={setRepoUrl}
             onUploadedPathChange={setUploadedPath}
+            onAnalysisOptionsChange={setAnalysisOptions}
           />
         );
       case "pages":
@@ -502,6 +629,23 @@ export default function App() {
     }
   };
 
+  if (!authSession) {
+    return showAuthPage || authError ? (
+      <AuthPage
+        key={authMode}
+        initialMode={authMode}
+        error={authError}
+        onAuthenticated={authenticate}
+        onBackToLanding={() => {
+          setAuthError("");
+          setShowAuthPage(false);
+        }}
+      />
+    ) : (
+      <LandingPage onOpenAuth={openAuth} />
+    );
+  }
+
   return (
     <main className="dashboard-shell min-h-screen overflow-x-hidden text-slate-100">
       <GlobalFilterModal
@@ -515,7 +659,7 @@ export default function App() {
 
       <div className="dashboard-container mx-auto w-full max-w-[1600px] px-4 py-4 pb-24 sm:px-6 md:pb-6">
         <div className="grid min-w-0 gap-4">
-          <TopBar />
+          <TopBar user={authSession} onSignOut={signOut} />
 
           <div className="workspace-layout grid min-w-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
             <ViewTabs

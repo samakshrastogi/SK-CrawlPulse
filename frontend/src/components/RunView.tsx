@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { runtime } from "../config/runtime";
 import { AnalysisForm } from "./AnalysisForm";
-import type { AnalysisResponse, AnalysisRun, SavedProject } from "../types/analysis";
+import type { AnalysisOptions, AnalysisResponse, AnalysisRun, SavedProject } from "../types/analysis";
 
 type MetricSnapshot = {
   pages: number;
@@ -38,6 +38,7 @@ type RunViewProps = {
   targetUrl: string;
   repoUrl: string;
   uploadedPath: string;
+  analysisOptions: AnalysisOptions;
   loading: boolean;
   error: string;
   urlError: string;
@@ -49,6 +50,7 @@ type RunViewProps = {
   onTargetUrlChange: (value: string) => void;
   onRepoUrlChange: (value: string) => void;
   onUploadedPathChange: (value: string) => void;
+  onAnalysisOptionsChange: (value: AnalysisOptions) => void;
 };
 
 const API_BASE_URL = runtime.apiBaseUrl;
