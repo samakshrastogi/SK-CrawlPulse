@@ -25,7 +25,6 @@ export function NavigationRail({ activeView, onViewChange }: NavigationRailProps
         </div>
         <div className="min-w-0">
           <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-300">SK CrawlPulse</p>
-          <p className="truncate text-sm text-slate-300">Dense workspace</p>
         </div>
       </div>
 

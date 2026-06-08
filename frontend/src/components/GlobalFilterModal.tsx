@@ -35,7 +35,6 @@ export function GlobalFilterModal({
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">Global filters</p>
-              <p className="mt-1 text-sm text-slate-400">Apply route, status, severity, and issue type.</p>
             </div>
             <button
               type="button"

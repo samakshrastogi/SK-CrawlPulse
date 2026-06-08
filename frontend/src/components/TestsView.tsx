@@ -84,9 +84,7 @@ export function TestsView({ result, filters }: TestsViewProps) {
     return (
       <EmptyStatePanel
         title="No test cases in view"
-        description="Either the run has not produced cases yet or the current route, status, or type filters narrowed the list to zero."
         actionLabel="Try"
-        actionHint="Broaden filters or include passed cases."
         tone="warn"
       />
     );
@@ -109,40 +107,27 @@ export function TestsView({ result, filters }: TestsViewProps) {
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Tests overview</p>
             <h2 className="mt-3 text-2xl font-semibold text-white">What this run covered and where it broke</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-300">
-              These cases combine repeated interaction failures, runtime findings, targeted scenarios, and baseline page smoke checks.
-              The page focuses on what failed first, how much of the product was covered, and why the selected case matters.
-            </p>
           </div>
           <div className="rounded-2xl border border-amber-300/18 bg-amber-400/8 px-4 py-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-amber-200">Current slice</p>
             <p className="mt-2 text-sm text-slate-200">
               {filters.route === "all" ? "All routes" : filters.route} • {filters.status === "all" ? "All status" : filters.status}
             </p>
-            <p className="mt-2 text-xs text-slate-400">
-              Showing {visibleTests.length} visible case{visibleTests.length === 1 ? "" : "s"} from {summary.total} filtered result
-              {summary.total === 1 ? "" : "s"}.
-            </p>
           </div>
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-          <MetricCard label="Filtered cases" value={String(summary.total)} helper="Cases matching the current filters." />
-          <MetricCard label="Failed" value={String(summary.failed)} helper="Cases with confirmed failure evidence." tone="fail" />
-          <MetricCard label="Critical" value={String(summary.critical)} helper="P0 items that need first attention." tone="warn" />
-          <MetricCard label="Routes" value={String(summary.routes)} helper="Distinct routes represented here." />
-          <MetricCard label="Case sources" value={String(summary.sourceKinds)} helper="How many analysis sources contributed to this slice." />
+          <MetricCard label="Filtered cases" value={String(summary.total)} />
+          <MetricCard label="Failed" value={String(summary.failed)} tone="fail" />
+          <MetricCard label="Critical" value={String(summary.critical)} tone="warn" />
+          <MetricCard label="Routes" value={String(summary.routes)} />
+          <MetricCard label="Case sources" value={String(summary.sourceKinds)} />
           <MetricCard
             label="Interactions tested"
             value={
               summary.interactionsDetected > 0
                 ? `${summary.interactionsTested}/${summary.interactionsDetected}`
                 : String(summary.interactionsTested)
-            }
-            helper={
-              summary.interactionsDetected > 0
-                ? "Executed checks compared with the interaction opportunities discovered during the crawl."
-                : "Observed interactions were not counted for this run."
             }
           />
         </div>
@@ -157,7 +142,6 @@ export function TestsView({ result, filters }: TestsViewProps) {
         <article className="min-w-0 rounded-[1.8rem] border border-white/10 bg-slate-950/82 p-6">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Grouped cases</p>
-            <p className="mt-2 text-sm text-slate-400">Critical failures are pinned first, then the remaining failures. Passed coverage appears only when no failures exist in the current slice.</p>
           </div>
 
           <div className="mt-5 grid gap-4">
@@ -166,7 +150,6 @@ export function TestsView({ result, filters }: TestsViewProps) {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-[0.22em] text-slate-400">{section.label}</p>
-                    <p className="mt-1 text-xs leading-6 text-slate-500">{section.hint}</p>
                   </div>
                   <span className="rounded-full border border-white/10 bg-slate-950/70 px-3 py-1 text-[11px] text-slate-200">
                     {section.items.length}
@@ -238,10 +221,10 @@ export function TestsView({ result, filters }: TestsViewProps) {
           <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-5">
             <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Why this case exists</p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <DetailCard label="Generated from" value={activeTest.sourceLabel ?? describeSourceKind(activeTest.sourceKind)} helper="The analysis source that produced this case." />
-              <DetailCard label="Likely owner" value={activeTest.ownerHint ?? "Frontend"} helper="The team or area that should triage this first." />
-              <DetailCard label="User impact" value={activeTest.userImpact ?? "No user-impact summary was generated for this case."} helper="What a real user is likely to feel when this issue happens." />
-              <DetailCard label="Confidence" value={toTitle(activeTest.confidence ?? "medium")} helper={describeConfidence(activeTest.confidence ?? "medium")} />
+              <DetailCard label="Generated from" value={activeTest.sourceLabel ?? describeSourceKind(activeTest.sourceKind)} />
+              <DetailCard label="Likely owner" value={activeTest.ownerHint ?? "Frontend"} />
+              <DetailCard label="User impact" value={activeTest.userImpact ?? "No user-impact summary was generated for this case."} />
+              <DetailCard label="Confidence" value={toTitle(activeTest.confidence ?? "medium")} />
             </div>
           </div>
 
@@ -345,19 +328,16 @@ function DiffFrame({ title, imageUrl }: { title: string; imageUrl?: string }) {
 function MetricCard({
   label,
   value,
-  helper,
   tone = "default",
 }: {
   label: string;
   value: string;
-  helper: string;
   tone?: "default" | "fail" | "pass" | "warn";
 }) {
   return (
     <div className={`rounded-2xl border px-4 py-4 ${surfaceTone(tone)}`}>
       <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">{label}</p>
       <p className="mt-2 text-lg font-semibold text-white">{value}</p>
-      <p className="mt-2 text-xs leading-6 text-slate-400">{helper}</p>
     </div>
   );
 }
@@ -368,12 +348,11 @@ function MetaPill({ label, tone = "default" }: { label: string; tone?: "default"
   );
 }
 
-function DetailCard({ label, value, helper }: { label: string; value: string; helper: string }) {
+function DetailCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-4">
       <p className="text-xs uppercase tracking-[0.25em] text-slate-400">{label}</p>
       <p className="mt-2 break-words text-sm font-medium text-white">{value}</p>
-      <p className="mt-2 text-xs leading-6 text-slate-400">{helper}</p>
     </div>
   );
 }
@@ -390,19 +369,6 @@ function describeSourceKind(kind?: string) {
       return "Baseline smoke check";
     default:
       return "Analysis-generated case";
-  }
-}
-
-function describeConfidence(confidence: "high" | "medium" | "low") {
-  switch (confidence) {
-    case "high":
-      return "This case is backed by direct runtime or repeated interaction evidence.";
-    case "medium":
-      return "This case is credible, but some interpretation was added during generation.";
-    case "low":
-      return "This case is more heuristic and should be validated before escalation.";
-    default:
-      return "Confidence was not classified for this case.";
   }
 }
 

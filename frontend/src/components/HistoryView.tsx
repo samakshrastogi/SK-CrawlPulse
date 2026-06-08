@@ -52,7 +52,6 @@ export function HistoryView({ runs, filters, onSelectRun }: HistoryViewProps) {
         <div className="flex flex-col gap-3">
           <div>
             <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-300">Run history</p>
-            <p className="mt-1 text-[12px] text-slate-400">Stored runs, compare selection, and coverage context for each site.</p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-[minmax(240px,1.25fr)_minmax(140px,0.7fr)_minmax(140px,0.7fr)]">

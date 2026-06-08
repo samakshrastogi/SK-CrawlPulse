@@ -75,9 +75,6 @@ export function CompareView({ availableRuns, runs, onCompareRuns }: CompareViewP
       <article className="rounded-[1.8rem] border border-white/10 bg-slate-950/82 p-5">
         <div>
           <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-300">Compare runs</p>
-          <p className="mt-1 text-[12px] text-slate-400">
-            Pick a baseline and a second completed run from the same domain to inspect coverage and finding deltas.
-          </p>
         </div>
 
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
@@ -139,19 +136,12 @@ export function CompareView({ availableRuns, runs, onCompareRuns }: CompareViewP
           </button>
         </div>
 
-        <div className="mt-3 rounded-2xl border border-cyan-300/10 bg-cyan-400/5 px-4 py-3 text-sm text-slate-300">
-          {baselineDomain
-            ? `${comparisonOptions.length} comparison run${comparisonOptions.length === 1 ? "" : "s"} available for ${baselineDomain}.`
-            : "Choose a baseline to limit the second selector to runs from the same domain."}
-        </div>
       </article>
 
       {runs.length < 2 ? (
         <EmptyStatePanel
           title="No comparison loaded"
-          description="Use the selectors above to load two completed runs from the same domain."
           actionLabel="Next step"
-          actionHint="Pick a baseline, pick a comparison, then load compare."
           tone="active"
         />
       ) : (
@@ -224,9 +214,7 @@ export function CompareView({ availableRuns, runs, onCompareRuns }: CompareViewP
                 ) : (
                   <EmptyStatePanel
                     title="No findings in this diff tab"
-                    description="This comparison is valid, but the selected diff mode has no matching issues between the two runs."
                     actionLabel="Try"
-                    actionHint="Switch tabs to new, fixed, or persistent."
                     tone="pass"
                   />
                 )}

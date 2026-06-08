@@ -56,6 +56,30 @@ class DedicatedLoginSessionError extends Error {
   }
 }
 
+const getCheckpointTimeoutMs = (expiresAt?: string) => {
+  if (!expiresAt) {
+    return null;
+  }
+
+  const expiresAtMs = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expiresAtMs)) {
+    return null;
+  }
+
+  return Math.max(expiresAtMs - Date.now(), 0);
+};
+
+const getCheckpointFallbackAction = (checkpoint: {
+  kind?: "manual_auth" | "login_choice";
+  allowedActions?: LoginPromptAction[];
+  autoContinueWithoutLogin?: boolean;
+}) =>
+  checkpoint.kind === "login_choice" &&
+  checkpoint.autoContinueWithoutLogin === true &&
+  checkpoint.allowedActions?.includes("continue_without_login")
+    ? "continue_without_login"
+    : null;
+
 type RunPersistenceBuffer = {
   snapshot: AnalysisRunView;
   pendingProgress: ProgressUpdate | null;
@@ -678,6 +702,7 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
             expiresAt: checkpoint.expiresAt,
             loginUrl: checkpoint.loginUrl,
             allowedActions: checkpoint.allowedActions,
+            autoContinueWithoutLogin: checkpoint.autoContinueWithoutLogin,
           },
           liveSession: checkpoint.liveSession,
         };
@@ -694,10 +719,48 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
         });
         await logRun(runId, "auth", checkpoint.instructions);
 
+        let timedOut = false;
+        let timeout: NodeJS.Timeout | undefined;
+        const fallbackAction = getCheckpointFallbackAction(checkpoint);
+        const timeoutMs = getCheckpointTimeoutMs(checkpoint.expiresAt);
+
         const action = await new Promise<LoginPromptAction>((resolve, reject) => {
-          checkpointWaiters.set(runId, { resolve, reject });
+          let settled = false;
+          const finish = (nextAction: LoginPromptAction) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            if (timeout) {
+              clearTimeout(timeout);
+            }
+            resolve(nextAction);
+          };
+          const fail = (error: Error) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            if (timeout) {
+              clearTimeout(timeout);
+            }
+            reject(error);
+          };
+
+          checkpointWaiters.set(runId, { resolve: finish, reject: fail });
+
+          if (fallbackAction && timeoutMs !== null) {
+            timeout = setTimeout(() => {
+              timedOut = true;
+              checkpointWaiters.delete(runId);
+              finish(fallbackAction);
+            }, timeoutMs);
+          }
         });
 
+        if (timedOut) {
+          await logRun(runId, "auth", `checkpoint timed out; auto-resuming with action: ${action}`, "warn");
+        }
         await logRun(runId, "auth", `checkpoint resumed with action: ${action}`);
         return action;
       },

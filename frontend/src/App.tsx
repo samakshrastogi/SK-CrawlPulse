@@ -21,7 +21,6 @@ const ANALYSIS_API_BASE_URL = `${API_BASE_URL}${runtime.analysisApiPath}`;
 const DEFAULT_ANALYSIS_OPTIONS = runtime.defaultAnalysisOptions;
 const SAVED_PROJECTS_KEY = "sk-crawlpulse:saved-projects";
 const APP_STATE_KEY = "sk-crawlpulse:app-state";
-const THEME_MODE_KEY = "pulse:theme-mode";
 
 const toProjectName = (targetUrl: string) => {
   try {
@@ -77,7 +76,6 @@ const mergeRunSnapshot = (previous: AnalysisRun | null, incoming: AnalysisRun): 
 };
 
 export default function App() {
-  const [themeMode, setThemeMode] = useState<"dark" | "light">("dark");
   const [targetUrl, setTargetUrl] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [uploadedPath, setUploadedPath] = useState("");
@@ -132,10 +130,7 @@ export default function App() {
         null;
 
   useEffect(() => {
-    const storedTheme = window.localStorage.getItem(THEME_MODE_KEY);
-    if (storedTheme === "light" || storedTheme === "dark") {
-      setThemeMode(storedTheme);
-    }
+    document.documentElement.dataset.theme = "light";
 
     const restoreState = async () => {
       const storedProjects = window.localStorage.getItem(SAVED_PROJECTS_KEY);
@@ -200,11 +195,6 @@ export default function App() {
 
     return () => streamRef.current?.close();
   }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = themeMode;
-    window.localStorage.setItem(THEME_MODE_KEY, themeMode);
-  }, [themeMode]);
 
   useEffect(() => {
     window.localStorage.setItem(SAVED_PROJECTS_KEY, JSON.stringify(savedProjects));
@@ -402,6 +392,7 @@ export default function App() {
           enabled: DEFAULT_ANALYSIS_OPTIONS.loginPromptEnabled,
           checkpointLabel: DEFAULT_ANALYSIS_OPTIONS.loginPromptLabel,
           timeoutSeconds: DEFAULT_ANALYSIS_OPTIONS.loginPromptTimeoutSeconds,
+          autoContinueWithoutLogin: false,
         },
       },
     };
@@ -512,13 +503,7 @@ export default function App() {
   };
 
   return (
-    <main
-      className={`min-h-screen overflow-x-hidden text-slate-100 ${
-        themeMode === "light"
-          ? "bg-[radial-gradient(circle_at_top,#f8fdff_0%,#eef6ff_38%,#e2ebf5_100%)]"
-          : "bg-[radial-gradient(circle_at_top,#162033_0%,#0b1220_45%,#030712_100%)]"
-      }`}
-    >
+    <main className="dashboard-shell min-h-screen overflow-x-hidden text-slate-100">
       <GlobalFilterModal
         open={filterModalOpen}
         filters={globalFilters}
@@ -528,30 +513,33 @@ export default function App() {
         currentRun={filteredCurrentRun}
       />
 
-      <div className="mx-auto w-full max-w-[1600px] px-4 py-4 pb-24 sm:px-6 md:pb-6">
-        <div className="grid min-w-0 gap-3">
-          <TopBar
-            themeMode={themeMode}
-            onThemeToggle={() => setThemeMode((current) => (current === "dark" ? "light" : "dark"))}
-          />
-          <ViewTabs
-            activeView={activeView}
-            onViewChange={setActiveView}
-            websiteOptions={websiteOptions}
-            selectedWebsite={globalFilters.website}
-            onWebsiteChange={(website) => setGlobalFilters((current) => ({ ...current, website }))}
-          />
-          {activeView !== "run" ? (
-            <TopStatusStrip
-              activeView={activeView}
-              currentRun={filteredCurrentRun}
-              result={filteredResult}
-              onOpenFilters={activeView === "overview" ? () => setFilterModalOpen(true) : undefined}
-              hasActiveFilters={hasActiveFilters}
-            />
-          ) : null}
+      <div className="dashboard-container mx-auto w-full max-w-[1600px] px-4 py-4 pb-24 sm:px-6 md:pb-6">
+        <div className="grid min-w-0 gap-4">
+          <TopBar />
 
-          <section className="min-w-0 overflow-x-hidden">{renderActiveView()}</section>
+          <div className="workspace-layout grid min-w-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
+            <ViewTabs
+              activeView={activeView}
+              onViewChange={setActiveView}
+              websiteOptions={websiteOptions}
+              selectedWebsite={globalFilters.website}
+              onWebsiteChange={(website) => setGlobalFilters((current) => ({ ...current, website }))}
+            />
+
+            <div className="workspace-stage grid min-w-0 gap-4">
+              {activeView !== "run" ? (
+                <TopStatusStrip
+                  activeView={activeView}
+                  currentRun={filteredCurrentRun}
+                  result={filteredResult}
+                  onOpenFilters={activeView === "overview" ? () => setFilterModalOpen(true) : undefined}
+                  hasActiveFilters={hasActiveFilters}
+                />
+              ) : null}
+
+              <section className="workspace-content-stage min-w-0 overflow-x-hidden">{renderActiveView()}</section>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -36,7 +36,6 @@ export function GlobalFilterBar({ filters, onChange, result, currentRun, compact
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-300">Global filters</p>
-            <p className="mt-2 text-sm text-slate-400">Route, status, severity, issue type.</p>
           </div>
           <button
             type="button"

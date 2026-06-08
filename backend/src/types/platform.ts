@@ -58,6 +58,7 @@ export interface LoginPromptConfig {
   instructions?: string;
   checkpointLabel?: string;
   timeoutSeconds?: number;
+  autoContinueWithoutLogin?: boolean;
 }
 
 export interface LoginFlowConfig {
@@ -173,6 +174,7 @@ export interface ProgressUpdate {
     expiresAt?: string;
     loginUrl?: string;
     allowedActions?: LoginPromptAction[];
+    autoContinueWithoutLogin?: boolean;
   };
 }
 

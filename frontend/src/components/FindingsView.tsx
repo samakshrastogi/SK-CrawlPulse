@@ -84,9 +84,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
     return (
       <EmptyStatePanel
         title="No findings yet"
-        description="Findings populate after a run captures runtime issues, assertions, accessibility checks, or failures."
         actionLabel="Next step"
-        actionHint="Start a scan from Run."
         tone="fail"
       />
     );
@@ -94,18 +92,18 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
 
   return (
     <section className="grid gap-5">
-      <div className="grid gap-3 lg:grid-cols-4">
+      <div className="grid gap-4 lg:grid-cols-4">
         <SummaryCard label="Visible findings" value={String(filteredFindings.length)} detail="After current filters" />
         <SummaryCard label="High severity" value={String(severityCounts.high)} detail="Needs attention now" />
         <SummaryCard label="Top route" value={topRoute?.label ?? "--"} detail={topRoute ? `${topRoute.count} finding${topRoute.count === 1 ? "" : "s"}` : "No route concentration"} />
         <SummaryCard label="Top issue type" value={topType?.label ?? "--"} detail={topType ? `${topType.count} finding${topType.count === 1 ? "" : "s"}` : "No type concentration"} />
       </div>
 
-      <article className="rounded-[1.6rem] border border-white/10 bg-slate-950/78 p-5">
+      <article className="findings-desk-console rounded-[20px] border border-slate-700 bg-[#1E293B] p-5 shadow-[0_16px_40px_rgba(15,23,42,0.18)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-cyan-300">View controls</p>
-            <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-400">{recommendedFocus}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">View controls</p>
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-300">{recommendedFocus}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {[
@@ -118,7 +116,9 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
                 type="button"
                 onClick={() => setGroupBy(key as typeof groupBy)}
                 className={`tab-motion rounded-full border px-3 py-2 text-xs ${
-                  groupBy === key ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"
+                  groupBy === key
+                    ? "border-transparent bg-[linear-gradient(135deg,#15616D,#26C6DA)] text-white shadow-[0_10px_24px_rgba(38,198,218,0.22)]"
+                    : "border-white/20 bg-white text-slate-700 hover:bg-cyan-50"
                 }`}
               >
                 {label}
@@ -127,7 +127,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
             <button
               type="button"
               onClick={() => setShowGlossary((value) => !value)}
-              className="tab-motion rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300"
+              className="tab-motion rounded-full border border-white/20 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-cyan-50"
             >
               {showGlossary ? "Hide glossary" : "What types mean"}
             </button>
@@ -139,11 +139,11 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
             {Array.from(new Set(filteredFindings.map((finding) => finding.type))).slice(0, 6).map((type) => {
               const meta = getFindingMeta(type);
               return (
-                <article key={type} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <article key={type} className="finding-type-card rounded-2xl border border-white/15 bg-white/10 p-4">
                   <p className="text-sm font-semibold text-white">{meta.label}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">{meta.description}</p>
-                  <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-400">Why this matters</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-400">{meta.impact}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-200">{meta.description}</p>
+                  <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-300">Why this matters</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-300">{meta.impact}</p>
                 </article>
               );
             })}
@@ -154,10 +154,10 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
       <div className="grid gap-4">
         {filteredFindings.length > 0 ? visibleGroups.map((group) => (
           <section key={group.key} className="grid gap-3">
-            <div className="flex items-center justify-between gap-3 rounded-[1.2rem] border border-white/10 bg-slate-950/60 px-4 py-3">
+            <div className="enterprise-card flex items-center justify-between gap-3 rounded-[20px] px-5 py-4">
               <div>
-                <p className="text-sm font-semibold text-white">{group.label}</p>
-                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">
+                <p className="text-base font-semibold text-slate-900">{group.label}</p>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   {group.items.length} finding{group.items.length === 1 ? "" : "s"}
                 </p>
               </div>
@@ -179,39 +179,35 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
               });
 
               return (
-                <article key={finding.findingId} className={`rounded-[1.6rem] border p-5 fade-in-up ${severityShell(finding.severity)}`}>
-                  <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)]">
-                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70">
+                <article key={finding.findingId} className="finding-card enterprise-card rounded-[20px] p-5 transition duration-200 fade-in-up hover:-translate-y-0.5 hover:shadow-[0_18px_46px_rgba(0,0,0,0.1)]">
+                  <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)_180px]">
+                    <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-slate-50">
                       {finding.screenshotUrl ? (
                         <img
                           src={`${apiBaseUrl}${finding.screenshotUrl}`}
                           alt={finding.summary}
-                          className="h-[132px] w-full object-cover"
+                          className="h-[168px] w-full object-cover"
                         />
                       ) : (
-                        <div className="flex h-[132px] items-center justify-center text-xs text-slate-500">
+                        <div className="flex h-[168px] items-center justify-center text-xs text-slate-500">
                           No screenshot
                         </div>
                       )}
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white">{finding.summary}</p>
-                          <p className="mt-2 break-words text-sm text-slate-300">{smartSummary}</p>
-                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                          <p className="break-words text-lg font-semibold text-slate-900">{finding.summary}</p>
+                          <p className="mt-2 break-words text-[15px] leading-7 text-slate-600">{smartSummary}</p>
+                          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                             <span>Route: {toRoute(finding.pageUrl)}</span>
                             <span>Impact: {toImpactLine(finding.severity, meta.impact)}</span>
                           </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge value={meta.label} />
-                          <Badge value={finding.severity} tone={finding.severity} />
-                        </div>
                       </div>
 
-                      <div className="mt-4 grid gap-2">
+                      <div className="mt-5 grid gap-2">
                         <CompactRow label="Top evidence" value={evidencePreview ?? "No evidence details recorded"} />
                         {extraEvidenceCount > 0 ? (
                           <CompactRow label="More evidence" value={`+${extraEvidenceCount} more item${extraEvidenceCount === 1 ? "" : "s"}`} />
@@ -222,7 +218,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
                         />
                       </div>
 
-                      <div className="mt-4">
+                      <div className="mt-4 lg:hidden">
                         <button
                           type="button"
                           onClick={() =>
@@ -231,7 +227,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
                               [finding.findingId]: !current[finding.findingId],
                             }))
                           }
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200"
+                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-cyan-50"
                         >
                           {isExpanded ? "Hide details" : "View details"}
                         </button>
@@ -239,9 +235,9 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
 
                       {isExpanded ? (
                         <div className="mt-4 grid gap-4">
-                          <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Details</p>
-                            <p className="mt-2 text-sm leading-6 text-slate-300">{finding.details}</p>
+                          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                            <p className="enterprise-label">Details</p>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">{finding.details}</p>
                           </div>
 
                           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -264,16 +260,16 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
                           </div>
 
                           <div>
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{meta.evidenceLabel} evidence</p>
+                            <p className="enterprise-label">{meta.evidenceLabel} evidence</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {finding.evidence.length > 0 ? (
                                 finding.evidence.slice(0, 6).map((item) => (
-                                  <span key={item} className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs text-slate-300">
+                                  <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
                                     {item}
                                   </span>
                                 ))
                               ) : (
-                                <span className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs text-slate-500">
+                                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500">
                                   No evidence details recorded
                                 </span>
                               )}
@@ -282,6 +278,25 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
                         </div>
                       ) : null}
                     </div>
+
+                    <aside className="flex flex-col items-start justify-between gap-4 lg:items-end">
+                      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                        <Badge value={finding.severity} tone={finding.severity} />
+                        <Badge value={meta.label} />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedFindings((current) => ({
+                            ...current,
+                            [finding.findingId]: !current[finding.findingId],
+                          }))
+                        }
+                        className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-cyan-50 lg:inline-flex"
+                      >
+                        {isExpanded ? "Hide details" : "View details"}
+                      </button>
+                    </aside>
                   </div>
                 </article>
               );
@@ -290,9 +305,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
         )) : (
           <EmptyStatePanel
             title="No findings match"
-            description="This run has findings, but the current route, severity, or type filters hide them."
             actionLabel="Try"
-            actionHint="Reset filters for the full issue list."
             tone="warn"
           />
         )}
@@ -303,19 +316,19 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
 
 function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <article className="rounded-[1.35rem] border border-white/10 bg-slate-950/70 px-4 py-4">
-      <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">{label}</p>
-      <p className="mt-2 break-words text-xl font-semibold text-white">{value}</p>
-      <p className="mt-2 text-xs text-slate-400">{detail}</p>
+    <article className="enterprise-card rounded-[20px] px-5 py-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(0,0,0,0.09)]">
+      <p className="enterprise-label">{label}</p>
+      <p className="mt-3 break-words text-2xl font-bold text-slate-900">{value}</p>
+      <p className="mt-2 text-sm text-slate-500">{detail}</p>
     </article>
   );
 }
 
 function InfoBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-300">{value}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+      <p className="enterprise-label">{label}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{value}</p>
     </div>
   );
 }
@@ -323,33 +336,27 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
 function CompactRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-wrap items-start gap-2 text-sm">
-      <span className="text-slate-400">{label}:</span>
-      <span className="min-w-0 flex-1 text-slate-200">{value}</span>
+      <span className="font-medium text-slate-500">{label}:</span>
+      <span className="min-w-0 flex-1 text-slate-700">{value}</span>
     </div>
   );
 }
 
 function Badge({ value, tone }: { value: string; tone?: string }) {
   const color =
-    tone === "high"
-      ? "border-rose-300/20 bg-rose-400/10 text-rose-200"
+    tone === "critical"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : tone === "high"
+      ? "border-orange-200 bg-orange-50 text-orange-700"
       : tone === "medium"
-        ? "border-amber-300/20 bg-amber-400/10 text-amber-200"
-        : tone === "low"
-          ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-200"
-          : "border-white/10 bg-white/5 text-slate-300";
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+      : tone === "low"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
+          : tone === "info"
+            ? "border-slate-200 bg-slate-50 text-slate-600"
+            : "border-slate-200 bg-white text-slate-600";
 
-  return <span className={`rounded-full border px-3 py-1 text-xs ${color}`}>{value}</span>;
-}
-
-function severityShell(severity: "high" | "medium" | "low") {
-  if (severity === "high") {
-    return "border-rose-300/18 bg-[linear-gradient(135deg,rgba(63,28,45,0.58)_0%,rgba(15,23,42,0.82)_100%)]";
-  }
-  if (severity === "medium") {
-    return "border-amber-300/18 bg-[linear-gradient(135deg,rgba(120,53,15,0.42)_0%,rgba(15,23,42,0.82)_100%)]";
-  }
-  return "border-cyan-300/18 bg-[linear-gradient(135deg,rgba(8,47,73,0.42)_0%,rgba(15,23,42,0.82)_100%)]";
+  return <span className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize ${color}`}>{value}</span>;
 }
 
 function toRoute(value: string) {

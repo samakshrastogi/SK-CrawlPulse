@@ -28,6 +28,18 @@ const readBoolean = (key: string): boolean => {
   return value === "true";
 };
 
+const crawlProfiles = ["auto", "generic", "youtube", "ecommerce", "dashboard", "auth-heavy"] as const;
+type CrawlProfile = (typeof crawlProfiles)[number];
+
+const readCrawlProfile = (key: string): CrawlProfile => {
+  const value = readString(key);
+  if (!crawlProfiles.includes(value as CrawlProfile)) {
+    throw new Error(`Invalid crawl profile environment variable: ${key}`);
+  }
+
+  return value as CrawlProfile;
+};
+
 export const runtime = {
   apiBaseUrl: readString("VITE_API_BASE_URL"),
   analysisApiPath: readString("VITE_ANALYSIS_API_PATH"),
@@ -38,7 +50,7 @@ export const runtime = {
     maxInteractionsPerPage: readNumber("VITE_DEFAULT_MAX_INTERACTIONS_PER_PAGE"),
     respectRobotsTxt: readBoolean("VITE_DEFAULT_RESPECT_ROBOTS_TXT"),
     streamHtmlPreview: readBoolean("VITE_DEFAULT_STREAM_HTML_PREVIEW"),
-    crawlProfile: readString("VITE_DEFAULT_CRAWL_PROFILE"),
+    crawlProfile: readCrawlProfile("VITE_DEFAULT_CRAWL_PROFILE"),
     strictBehaviorMode: readBoolean("VITE_DEFAULT_STRICT_BEHAVIOR_MODE"),
     promptForLogin: readBoolean("VITE_DEFAULT_PROMPT_FOR_LOGIN"),
     loginPromptEnabled: readBoolean("VITE_LOGIN_CHECKPOINT_ENABLED"),

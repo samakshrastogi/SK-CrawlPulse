@@ -6,7 +6,7 @@ type OverviewViewProps = {
   result: AnalysisResponse | null;
 };
 
-const insightClassName = "app-card fade-in-up px-4 py-3";
+const insightClassName = "enterprise-card fade-in-up rounded-[20px] px-5 py-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(0,0,0,0.09)]";
 
 const toHeadline = (result: AnalysisResponse) => {
   const pageCount = result.frontend.pages.length;
@@ -102,46 +102,46 @@ export function OverviewView({ result }: OverviewViewProps) {
     : [];
 
   return (
-    <section className="grid gap-3">
+    <section className="grid gap-4">
       {result ? (
-        <div className="grid gap-3 fade-in-up">
-          <article className="rounded-[1.35rem] border border-cyan-300/12 bg-[linear-gradient(180deg,rgba(8,47,73,0.42)_0%,rgba(15,23,42,0.88)_100%)] px-4 py-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Executive summary</p>
-            <h2 className="mt-2 break-words text-xl font-semibold text-white">{toHeadline(result)}</h2>
-            <p className="mt-2 max-w-4xl text-sm text-slate-300">
+        <div className="grid gap-4 fade-in-up">
+          <article className="executive-summary-card enterprise-card rounded-[24px] px-6 py-6">
+            <p className="enterprise-label text-cyan-700">Executive summary</p>
+            <h2 className="mt-3 max-w-5xl break-words text-[2rem] font-bold leading-tight text-slate-900">{toHeadline(result)}</h2>
+            <p className="enterprise-body mt-3 max-w-4xl">
               Coverage is {coverage} with {tested} of {totalButtons} target buttons exercised. {issueCases} generated test
               case{issueCases === 1 ? "" : "s"} are currently marked as failed.
             </p>
           </article>
 
-          <div className="grid gap-3 lg:grid-cols-4">
+          <div className="grid gap-4 lg:grid-cols-4">
             <article className={insightClassName}>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Coverage</p>
-              <p className="mt-1 text-[1.75rem] font-semibold leading-none text-white">{coverage}</p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="enterprise-label">Coverage</p>
+              <p className="mt-3 text-[2.25rem] font-bold leading-none text-slate-900">{coverage}</p>
+              <p className="mt-3 text-sm text-slate-500">
                 {tested}/{totalButtons} buttons tested
               </p>
             </article>
             <article className={insightClassName}>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Scan scope</p>
-              <p className="mt-1 text-[1.75rem] font-semibold leading-none text-white">{pages.length}</p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="enterprise-label">Scan scope</p>
+              <p className="mt-3 text-[2.25rem] font-bold leading-none text-slate-900">{pages.length}</p>
+              <p className="mt-3 text-sm text-slate-500">
                 pages and {interactions.length} interactions observed
               </p>
             </article>
             <article className={insightClassName}>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Risk clusters</p>
-              <p className="mt-1 text-[1.75rem] font-semibold leading-none text-white">{failureClusters.length}</p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="enterprise-label">Risk clusters</p>
+              <p className="mt-3 text-[2.25rem] font-bold leading-none text-slate-900">{failureClusters.length}</p>
+              <p className="mt-3 text-sm text-slate-500">
                 {failed} failed checks and {warnings.length} warnings
               </p>
             </article>
             <article className={insightClassName}>
-              <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Backend context</p>
-              <p className="mt-1 text-[1.75rem] font-semibold leading-none text-white">
+              <p className="enterprise-label">Backend context</p>
+              <p className="mt-3 text-[2.25rem] font-bold leading-none text-slate-900">
                 {backendValidation?.provided ? "Linked" : "None"}
               </p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-3 text-sm text-slate-500">
                 {backendValidation?.provided
                   ? `${backendValidation.matchedEndpoints.length} matched endpoint${
                       backendValidation.matchedEndpoints.length === 1 ? "" : "s"
@@ -151,57 +151,57 @@ export function OverviewView({ result }: OverviewViewProps) {
             </article>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-            <article className="rounded-[1.35rem] border border-white/10 bg-slate-950/60 px-4 py-3.5">
-              <p className="text-xs uppercase tracking-[0.22em] text-cyan-300">Severity breakdown</p>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <article className="insight-panel enterprise-card rounded-[20px] px-5 py-5">
+              <p className="enterprise-label">Severity breakdown</p>
               <div className="mt-3 grid gap-2">
                 {severityCounts.map((item) => (
                   <div
                     key={item.severity}
-                    className="flex items-center justify-between rounded-[1rem] border border-white/10 bg-white/[0.03] px-3.5 py-2.5"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3"
                   >
-                    <span className="text-sm font-medium capitalize text-white">{item.severity}</span>
-                    <span className="text-sm text-slate-300">{item.count} finding{item.count === 1 ? "" : "s"}</span>
+                    <span className="text-sm font-medium capitalize text-slate-900">{item.severity}</span>
+                    <span className="text-sm text-slate-500">{item.count} finding{item.count === 1 ? "" : "s"}</span>
                   </div>
                 ))}
               </div>
             </article>
 
-            <article className="rounded-[1.35rem] border border-white/10 bg-slate-950/60 px-4 py-3.5">
-              <p className="text-xs uppercase tracking-[0.22em] text-cyan-300">Most affected routes</p>
+            <article className="insight-panel enterprise-card rounded-[20px] px-5 py-5">
+              <p className="enterprise-label">Most affected routes</p>
               <div className="mt-3 grid gap-2">
                 {topRoutes.length > 0 ? (
                   topRoutes.map((item) => (
                     <div
                       key={item.route}
-                      className="flex items-center justify-between rounded-[1rem] border border-white/10 bg-white/[0.03] px-3.5 py-2.5"
+                      className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3"
                     >
-                      <span className="min-w-0 break-all pr-3 text-sm font-medium text-white">{item.route}</span>
-                      <span className="text-sm text-slate-300">{item.count} issue{item.count === 1 ? "" : "s"}</span>
+                      <span className="min-w-0 break-all pr-3 text-sm font-medium text-slate-900">{item.route}</span>
+                      <span className="text-sm text-slate-500">{item.count} issue{item.count === 1 ? "" : "s"}</span>
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-[1rem] border border-white/10 bg-white/[0.03] px-3.5 py-3 text-sm text-slate-400">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
                     No route-level finding concentration detected in this run.
                   </div>
                 )}
               </div>
             </article>
 
-            <article className="rounded-[1.35rem] border border-white/10 bg-slate-950/60 px-4 py-3.5">
-              <p className="text-xs uppercase tracking-[0.22em] text-cyan-300">Next steps</p>
+            <article className="insight-panel enterprise-card rounded-[20px] px-5 py-5">
+              <p className="enterprise-label">Next steps</p>
               <div className="mt-3 grid gap-2">
                 {nextSteps.length > 0 ? (
                   nextSteps.map((item) => (
                     <div
                       key={item}
-                      className="rounded-[1rem] border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-slate-300"
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600"
                     >
                       {item}
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-[1rem] border border-white/10 bg-white/[0.03] px-3.5 py-3 text-sm text-slate-400">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
                     No immediate action is suggested from the current run.
                   </div>
                 )}
@@ -251,9 +251,7 @@ export function OverviewView({ result }: OverviewViewProps) {
               ) : (
                 <EmptyStatePanel
                   title="No suggestions"
-                  description="No improvement suggestions were generated for this run's top insight slice."
                   actionLabel="Next step"
-                  actionHint="Open Tests for detailed case suggestions."
                   tone="pass"
                 />
               )}
@@ -263,9 +261,7 @@ export function OverviewView({ result }: OverviewViewProps) {
       ) : (
         <EmptyStatePanel
           title="No insights yet"
-          description="This workspace fills with coverage, findings, and suggestions after the first analysis run."
           actionLabel="Next step"
-          actionHint="Open Run and start a target scan."
           tone="active"
         />
       )}

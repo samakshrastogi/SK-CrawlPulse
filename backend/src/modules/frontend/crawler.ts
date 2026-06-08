@@ -54,6 +54,7 @@ type CrawlCallbacks = {
     liveSession?: LiveSessionSnapshot;
     loginUrl?: string;
     allowedActions?: Array<"continue_without_login" | "continue_after_login">;
+    autoContinueWithoutLogin?: boolean;
   }) => Promise<"continue_without_login" | "continue_after_login">;
 };
 
@@ -71,6 +72,11 @@ type LoginSurfaceDetection = {
   label: string;
   reason: "password_field" | "login_link";
   loginUrl?: string;
+  selector?: string;
+};
+
+type PreparedAuthState = {
+  authenticatedStartUrl?: string;
 };
 
 const browserCandidates = [
@@ -375,10 +381,11 @@ const resolveCrawlProfile = (request: AnalysisRequest, baseUrl: URL): ResolvedCr
     },
   };
 
-  const profileDefaults = defaults[name];
+  const hasKnownProfile = Object.prototype.hasOwnProperty.call(defaults, name);
+  const profileDefaults = hasKnownProfile ? defaults[name] : defaults.generic;
 
   return {
-    name,
+    name: hasKnownProfile ? name : "generic",
     maxPages: requested.maxPages ?? profileDefaults.maxPages,
     maxLinksPerPage: requested.maxLinksPerPage ?? profileDefaults.maxLinksPerPage,
     maxDepth: requested.maxDepth ?? profileDefaults.maxDepth,
@@ -771,7 +778,7 @@ const detectLoginSurface = async (page: Page): Promise<LoginSurfaceDetection | n
     () =>
       page.evaluate(() => {
         const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
-        const loginPattern = /\b(log ?in|sign ?in|account|continue with email|continue with google)\b/i;
+        const loginPattern = /\b(log ?in|sign ?in|continue with email|continue with google)\b/i;
         const passwordField = document.querySelector(
           "input[type='password'], input[autocomplete='current-password'], input[autocomplete='new-password']",
         );
@@ -790,7 +797,7 @@ const detectLoginSurface = async (page: Page): Promise<LoginSurfaceDetection | n
         }
 
         const candidates = Array.from(document.querySelectorAll("a[href], button, [role='button']"));
-        for (const candidate of candidates) {
+        for (const [index, candidate] of candidates.entries()) {
           const text =
             normalize(candidate.textContent) ||
             normalize(candidate.getAttribute("aria-label")) ||
@@ -799,10 +806,16 @@ const detectLoginSurface = async (page: Page): Promise<LoginSurfaceDetection | n
             continue;
           }
 
+          const selectorId = `login-surface-${index}`;
+          if (candidate instanceof HTMLElement) {
+            candidate.setAttribute("data-sk-login-surface-id", selectorId);
+          }
+
           return {
             label: text,
             reason: "login_link" as const,
             loginUrl: candidate instanceof HTMLAnchorElement ? candidate.href : undefined,
+            selector: `[data-sk-login-surface-id="${selectorId}"]`,
           };
         }
 
@@ -810,6 +823,27 @@ const detectLoginSurface = async (page: Page): Promise<LoginSurfaceDetection | n
       }),
     () => null,
   );
+
+const clickDetectedLoginControl = async (page: Page, detection: LoginSurfaceDetection) => {
+  if (!detection.selector) {
+    return false;
+  }
+
+  const beforeUrl = page.url();
+  const beforeSignature = await getPageSignature(page).catch(() => "");
+
+  try {
+    await page.locator(detection.selector).first().click({
+      timeout: Math.min(env.crawler.timeoutMs, 5_000),
+    });
+    await waitForPageSettled(page, Math.min(env.crawler.timeoutMs, env.crawler.navigationRecoverySettleTimeoutMs));
+  } catch {
+    return false;
+  }
+
+  const afterSignature = await getPageSignature(page).catch(() => "");
+  return page.url() !== beforeUrl || afterSignature !== beforeSignature;
+};
 
 const waitForAuthenticatedSession = async ({
   page,
@@ -869,6 +903,8 @@ const maybePauseForDetectedLogin = async ({
     } catch {
       movedToLoginPage = false;
     }
+  } else if (!detection.loginUrl) {
+    movedToLoginPage = await clickDetectedLoginControl(page, detection);
   }
 
   const loginPrompt = request.options.loginPrompt;
@@ -899,6 +935,7 @@ const maybePauseForDetectedLogin = async ({
     liveSession,
     loginUrl: page.url(),
     allowedActions: ["continue_without_login", "continue_after_login"],
+    autoContinueWithoutLogin: loginPrompt?.autoContinueWithoutLogin === true,
   });
 
   if (action === "continue_without_login" && movedToLoginPage) {
@@ -1044,6 +1081,7 @@ const buildFailureClusters = (results: InteractionResult[]): FailureCluster[] =>
 const discoverConnectedPages = async ({
   page,
   baseUrl,
+  startUrls,
   maxPages,
   maxDepth,
   maxLinksPerPage,
@@ -1059,6 +1097,7 @@ const discoverConnectedPages = async ({
 }: {
   page: Page;
   baseUrl: URL;
+  startUrls?: string[];
   maxPages: number;
   maxDepth: number;
   maxLinksPerPage: number;
@@ -1072,12 +1111,41 @@ const discoverConnectedPages = async ({
   onDiscoveredPage?: (pages: CrawlPageEntry[], latest: CrawlPageEntry) => Promise<void> | void;
   onWarning?: (message: string) => Promise<void> | void;
 }): Promise<CrawlPageEntry[]> => {
-  const queue = [{ url: baseUrl.toString(), depth: 0, routeKey: toRoutePattern(baseUrl.toString()) }];
+  const queue: Array<{ url: string; depth: number; routeKey: string }> = [];
   const visitedUrls = new Set<string>();
   const visitedRoutes = new Set<string>();
-  const queuedRoutes = new Set(queue.map((item) => item.routeKey));
+  const queuedRoutes = new Set<string>();
   const discoveredPages: CrawlPageEntry[] = [];
   const disallowRules = await readRobotsRules(baseUrl, respectRobotsTxt);
+  const initialUrls = [...(startUrls ?? []), baseUrl.toString()];
+
+  for (const candidateUrl of initialUrls) {
+    try {
+      const absoluteUrl = new URL(candidateUrl, baseUrl);
+      const absolute = absoluteUrl.toString();
+      const allowed =
+        (sameOrigin(baseUrl, absolute) || matchAllowedDomain(absoluteUrl, domainAllowlist)) &&
+        matchAllowedDomain(absoluteUrl, domainAllowlist);
+
+      if (!allowed || shouldExcludeUrl(absoluteUrl, excludePathPatterns)) {
+        continue;
+      }
+
+      const routeKey = toRoutePattern(absolute);
+      if (!queuedRoutes.has(routeKey)) {
+        queue.push({ url: absolute, depth: 0, routeKey });
+        queuedRoutes.add(routeKey);
+      }
+    } catch {
+      // Ignore malformed authenticated start URLs and fall back to the base URL.
+    }
+  }
+
+  if (queue.length === 0) {
+    const routeKey = toRoutePattern(baseUrl.toString());
+    queue.push({ url: baseUrl.toString(), depth: 0, routeKey });
+    queuedRoutes.add(routeKey);
+  }
 
   while (queue.length > 0 && discoveredPages.length < maxPages) {
     const next = queue.shift();
@@ -1172,17 +1240,18 @@ const prepareAuth = async ({
   networkRequests: NetworkObservation[];
   consoleEvents: string[];
   callbacks?: CrawlCallbacks;
-}) => {
+}): Promise<PreparedAuthState> => {
   if (request.auth?.cookies?.length) {
     await context.addCookies(request.auth.cookies);
   }
 
   const login = request.auth?.login;
   if (!login?.url) {
-    return;
+    return {};
   }
 
   await gotoStable(page, login.url, env.crawler.timeoutMs);
+  let authenticatedStartUrl: string | undefined;
 
   const previewImageUrl = await capturePreviewImage({
     page,
@@ -1205,31 +1274,45 @@ const prepareAuth = async ({
       timeoutMs: env.crawler.authSessionDetectionTimeoutMs,
     }).catch(() => false);
     if (autoAuthenticated) {
+      authenticatedStartUrl = page.url();
       await callbacks.onWarning?.(
         `Login session at ${toRoutePath(page.url())} appears authenticated already, skipping manual login checkpoint.`,
       );
     } else {
-    const loginSurface = await detectLoginSurface(page).catch(() => null);
-    const appearsAuthenticated = !loginSurface;
-    if (appearsAuthenticated) {
-      await callbacks.onWarning?.(
-        `Login session at ${toRoutePath(page.url())} appears authenticated already, skipping manual login checkpoint.`,
-      );
-    } else {
-    const timeoutSeconds = login.manualCheckpoint.timeoutSeconds ?? env.crawler.loginCheckpointTimeoutSeconds;
-    await callbacks.waitForCheckpoint({
-      kind: "manual_auth",
-      label: login.manualCheckpoint.checkpointLabel ?? "Manual login / OTP required",
-      instructions:
-        login.manualCheckpoint.instructions ??
-        "Complete the private login or OTP step in the active browser session, then continue the checkpoint.",
-      currentPageUrl: page.url(),
-      expiresAt: new Date(Date.now() + timeoutSeconds * 1000).toISOString(),
-      liveSession,
-      loginUrl: page.url(),
-      allowedActions: ["continue_after_login"],
-    });
-    }
+      const loginSurface = await detectLoginSurface(page).catch(() => null);
+      const appearsAuthenticated = !loginSurface;
+      if (appearsAuthenticated) {
+        authenticatedStartUrl = page.url();
+        await callbacks.onWarning?.(
+          `Login session at ${toRoutePath(page.url())} appears authenticated already, skipping manual login checkpoint.`,
+        );
+      } else {
+        const timeoutSeconds = login.manualCheckpoint.timeoutSeconds ?? env.crawler.loginCheckpointTimeoutSeconds;
+        await callbacks.waitForCheckpoint({
+          kind: "manual_auth",
+          label: login.manualCheckpoint.checkpointLabel ?? "Manual login / OTP required",
+          instructions:
+            login.manualCheckpoint.instructions ??
+            "Complete the private login or OTP step in the active browser session, then continue the checkpoint.",
+          currentPageUrl: page.url(),
+          expiresAt: new Date(Date.now() + timeoutSeconds * 1000).toISOString(),
+          liveSession,
+          loginUrl: page.url(),
+          allowedActions: ["continue_after_login"],
+        });
+
+        await waitForPageSettled(page, Math.min(env.crawler.timeoutMs, env.crawler.navigationRecoverySettleTimeoutMs)).catch(
+          () => undefined,
+        );
+        const remainingLoginSurface = await detectLoginSurface(page).catch(() => null);
+        if (remainingLoginSurface) {
+          await callbacks.onWarning?.(
+            `Login checkpoint continued while ${remainingLoginSurface.label || remainingLoginSurface.reason} is still visible; authenticated routes may be unavailable.`,
+          );
+        } else {
+          authenticatedStartUrl = page.url();
+        }
+      }
     }
   }
 
@@ -1237,16 +1320,23 @@ const prepareAuth = async ({
     await page.waitForSelector(login.waitForSelector, {
       timeout: env.crawler.timeoutMs,
     });
+    authenticatedStartUrl = page.url();
   }
 
   if (login.waitForUrlIncludes) {
-    await page.waitForURL(
-      (url) => url.toString().includes(login.waitForUrlIncludes ?? ""),
-      {
-        timeout: env.crawler.timeoutMs,
-      },
-    );
+    const expectedUrlPart = login.waitForUrlIncludes;
+    if (!page.url().includes(expectedUrlPart)) {
+      await page.waitForURL(
+        (url) => url.toString().includes(expectedUrlPart),
+        {
+          timeout: env.crawler.timeoutMs,
+        },
+      );
+    }
+    authenticatedStartUrl = page.url();
   }
+
+  return { authenticatedStartUrl };
 };
 
 const evaluateInteraction = async ({
@@ -1532,26 +1622,36 @@ export const crawlFrontend = async (
 
   const context = await browser.newContext(contextOptions);
   await context.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", {
-      get: () => undefined,
-    });
+    const defineSafeGetter = <TTarget extends object, TValue>(
+      target: TTarget,
+      property: PropertyKey,
+      value: TValue,
+    ) => {
+      try {
+        const descriptor = Object.getOwnPropertyDescriptor(target, property);
+        if (descriptor && descriptor.configurable === false) {
+          return;
+        }
 
-    Object.defineProperty(navigator, "languages", {
-      get: () => ["en-US", "en"],
-    });
+        Object.defineProperty(target, property, {
+          configurable: true,
+          get: () => value,
+        });
+      } catch {
+        // Some browser-provided properties are intentionally non-configurable.
+      }
+    };
 
-    Object.defineProperty(navigator, "plugins", {
-      get: () => [1, 2, 3, 4, 5],
-    });
+    defineSafeGetter(navigator, "webdriver", undefined);
+    defineSafeGetter(navigator, "languages", ["en-US", "en"]);
+    defineSafeGetter(navigator, "plugins", [1, 2, 3, 4, 5]);
 
     const chromeRuntime = {
       runtime: {},
       app: {},
     };
 
-    Object.defineProperty(window, "chrome", {
-      get: () => chromeRuntime,
-    });
+    defineSafeGetter(window, "chrome", chromeRuntime);
   });
   const page = await context.newPage();
   const networkRequests: NetworkObservation[] = [];
@@ -1604,7 +1704,7 @@ export const crawlFrontend = async (
       pagesPreview: [],
     });
 
-    await prepareAuth({
+    const authState = await prepareAuth({
       page,
       context,
       request,
@@ -1624,6 +1724,18 @@ export const crawlFrontend = async (
       promptState: loginPromptState,
     });
 
+    const authenticatedStartUrls = new Set<string>();
+    if (authState.authenticatedStartUrl) {
+      authenticatedStartUrls.add(authState.authenticatedStartUrl);
+    }
+
+    if (loginPromptState.handled) {
+      const currentLoginSurface = await detectLoginSurface(page).catch(() => null);
+      if (!currentLoginSurface) {
+        authenticatedStartUrls.add(page.url());
+      }
+    }
+
     await callbacks?.onProgress?.({
       stageKey: "discovering-pages",
       stageLabel: "Discovering pages",
@@ -1640,6 +1752,7 @@ export const crawlFrontend = async (
     const discoveredPages = await discoverConnectedPages({
       page,
       baseUrl,
+      startUrls: Array.from(authenticatedStartUrls),
       maxPages,
       maxDepth,
       maxLinksPerPage,

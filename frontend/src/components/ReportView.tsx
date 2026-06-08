@@ -102,9 +102,7 @@ export function ReportView({ result, filters }: ReportViewProps) {
     return (
       <EmptyStatePanel
         title="No report yet"
-        description="Report view becomes available after a completed run with flow, findings, and backend correlation."
         actionLabel="Next step"
-        actionHint="Run a target and return here."
         tone="warn"
       />
     );
@@ -158,25 +156,18 @@ export function ReportView({ result, filters }: ReportViewProps) {
         </div>
 
         <div className="grid gap-3 lg:grid-cols-4">
-          <ReportStat label="Confidence" value={confidence.level} hint={confidence.summary} />
+          <ReportStat label="Confidence" value={confidence.level} />
           <ReportStat
             label="Highest-risk route"
             value={topRiskRoute?.route ?? "--"}
-            hint={topRiskRoute ? `${topRiskRoute.findings} visible findings` : "No route concentration"}
           />
           <ReportStat
             label="Dominant issue type"
             value={dominantType?.label ?? "--"}
-            hint={dominantType ? `${dominantType.count} visible finding${dominantType.count === 1 ? "" : "s"}` : "No type concentration"}
           />
           <ReportStat
             label="Backend correlation"
             value={result.backendValidation.provided ? "Linked" : "None"}
-            hint={
-              result.backendValidation.provided
-                ? `${result.backendValidation.matchedEndpoints.length} matched, ${mismatchedEndpoints.length} mismatched`
-                : "Frontend-only evidence"
-            }
           />
         </div>
 
@@ -186,7 +177,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Executive summary"
                 title={result.report.overview?.summary ?? "This run has been converted into a structured report."}
-                description="This section connects coverage, failures, backend correlation, and likely user impact so the report reads as a decision document instead of raw telemetry."
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 <InsightCard
@@ -219,7 +209,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Methodology"
                 title={`Confidence: ${confidence.level}`}
-                description={confidence.summary}
               />
               <DetailList title="How to read this report" items={methodology} />
               <DetailList title="Confidence drivers" items={confidence.reasons} />
@@ -229,7 +218,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Recommended next actions"
                 title="What to do next"
-                description="These actions are prioritized from the current run evidence, filter state, and backend/frontend correlations."
               />
               <div className="grid gap-2">
                 {recommendations.map((item, index) => (
@@ -245,7 +233,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Route risk"
                 title="Which routes deserve attention first"
-                description="This view groups visible findings and recurring failure clusters by route so you can judge where user impact concentrates."
               />
               <div className="grid gap-3 md:grid-cols-2">
                 {routeRisks.length > 0 ? (
@@ -269,9 +256,7 @@ export function ReportView({ result, filters }: ReportViewProps) {
                 ) : (
                   <EmptyStatePanel
                     title="No route concentration"
-                    description="Visible findings do not currently cluster around a specific route in this report slice."
                     actionLabel="Try"
-                    actionHint="Broaden filters or run a deeper pass."
                     tone="pass"
                   />
                 )}
@@ -286,7 +271,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Flow map"
                 title="Observed navigation transitions"
-                description="The flow view shows how the crawler moved between pages, where transitions failed, and which paths were actually exercised."
               />
               <button
                 type="button"
@@ -318,9 +302,7 @@ export function ReportView({ result, filters }: ReportViewProps) {
               ) : (
                 <EmptyStatePanel
                   title="No flow matches"
-                  description="The current route or status filters removed the visible steps from this report slice."
                   actionLabel="Try"
-                  actionHint="Reset filters or switch route."
                   tone="warn"
                 />
               )}
@@ -334,7 +316,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Backend correlation"
                 title={result.backendValidation.provided ? "Frontend and backend evidence were correlated" : "No backend correlation was provided"}
-                description="This section helps distinguish between isolated frontend breakage and issues that also point to API contract or route ownership problems."
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 <CompactMetric label="Matched endpoints" value={String(result.backendValidation.matchedEndpoints.length)} />
@@ -354,7 +335,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Mismatch review"
                 title="Where the contract looks weak"
-                description="Mismatched endpoints are useful when the UI appears functional but the request shape, response behavior, or route ownership does not line up cleanly."
               />
               <div className="grid gap-2">
                 {mismatchedEndpoints.length > 0 ? (
@@ -386,7 +366,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Filtered findings"
                 title={result.report.issues?.summary ?? "Visible issues in the current report slice"}
-                description="Each finding is summarized with severity, route, and evidence count so reviewers can understand what is user-visible and what still needs deeper validation."
               />
               <div className="grid gap-3">
                 {findings.length > 0 ? (
@@ -405,9 +384,7 @@ export function ReportView({ result, filters }: ReportViewProps) {
                 ) : (
                   <EmptyStatePanel
                     title="No findings in this slice"
-                    description="The report is available, but the current severity, route, or type filters removed the visible findings."
                     actionLabel="Try"
-                    actionHint="Broaden filters for a wider report."
                     tone="active"
                   />
                 )}
@@ -418,7 +395,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Issue context"
                 title="Why these findings matter"
-                description="This side panel turns the filtered finding set into route-level risk, recurring cluster context, and report issue notes."
               />
               <DetailList
                 title={result.report.issues?.title ?? "Issue notes"}
@@ -438,7 +414,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Performance and API"
                 title={result.report.performance?.summary ?? "Live API assertions and runtime response behavior"}
-                description="This section makes it easier to separate UX breakage from slow or failing backend behavior."
               />
               <div className="grid gap-3 sm:grid-cols-3">
                 <CompactMetric label="API assertions" value={String(apiAssertions.length)} />
@@ -459,7 +434,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
               <SectionHeader
                 eyebrow="Assertion review"
                 title="Responses that need investigation"
-                description="Failing assertions often explain why interface defects appear inconsistent, blocked, or incomplete to the user."
               />
               <div className="grid gap-2">
                 {failingAssertions.length > 0 ? (
@@ -488,7 +462,6 @@ export function ReportView({ result, filters }: ReportViewProps) {
             <SectionHeader
               eyebrow="Documentation outline"
               title="Packaged report structure"
-              description="This outline shows how the report is organized for handoff, PDF packaging, or stakeholder review."
             />
             <div className="grid gap-3">
               {result.report.pdfOutline.slice(0, 8).map((item, index) => (
@@ -507,22 +480,20 @@ export function ReportView({ result, filters }: ReportViewProps) {
   );
 }
 
-function SectionHeader({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div className="min-w-0">
       <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">{eyebrow}</p>
       <h3 className="mt-2 break-words text-lg font-semibold text-white">{title}</h3>
-      <p className="mt-2 break-words text-sm leading-6 text-slate-400">{description}</p>
     </div>
   );
 }
 
-function ReportStat({ label, value, hint }: { label: string; value: string; hint: string }) {
+function ReportStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">{label}</p>
       <p className="mt-2 break-all text-lg font-semibold text-white">{value}</p>
-      <p className="mt-2 break-words text-xs text-slate-400">{hint}</p>
     </div>
   );
 }

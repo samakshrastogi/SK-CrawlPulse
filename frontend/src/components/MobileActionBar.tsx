@@ -18,7 +18,7 @@ export function MobileActionBar({
   onSave,
 }: MobileActionBarProps) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-slate-950/94 px-4 py-3 backdrop-blur-xl md:hidden">
+    <div className="mobile-action-shell fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-slate-950/94 px-4 py-3 backdrop-blur-xl md:hidden">
       <div className="grid grid-cols-4 gap-2">
         <ActionButton label="Run" tone="active" onClick={onRun} />
         <ActionButton label="Retry" tone="fail" disabled={!canRetry} onClick={onRetry} />

@@ -53,6 +53,34 @@ type RunViewProps = {
 
 const API_BASE_URL = runtime.apiBaseUrl;
 const ANALYSIS_API_BASE_URL = `${runtime.apiBaseUrl}${runtime.analysisApiPath}`;
+type CheckpointAction = "continue_without_login" | "continue_after_login";
+
+const continueCheckpointRun = async (runId: string, action: CheckpointAction) => {
+  const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${runId}/checkpoint/continue`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? "Failed to continue checkpoint");
+  }
+};
+
+const startLoginSessionRun = async (runId: string) => {
+  const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${runId}/checkpoint/login-run`, {
+    method: "POST",
+  });
+  const nextRun = (await response.json()) as AnalysisRun & { error?: string };
+  if (!response.ok) {
+    throw new Error(nextRun.error ?? "Failed to create login session");
+  }
+
+  return nextRun;
+};
 
 export function RunView({
   currentRun,
@@ -122,7 +150,11 @@ export function RunView({
   }, [previewModalOpen]);
 
   useEffect(() => {
-    if (currentRun?.status !== "awaiting_checkpoint" || currentRun.progress.checkpoint?.kind !== "login_choice") {
+    if (
+      currentRun?.status !== "awaiting_checkpoint" ||
+      currentRun.progress.checkpoint?.kind !== "login_choice" ||
+      currentRun.progress.checkpoint.autoContinueWithoutLogin !== true
+    ) {
       setLoginDecisionHandled(null);
       return;
     }
@@ -140,13 +172,7 @@ export function RunView({
 
     if (Date.now() >= fallbackAt) {
       setLoginDecisionHandled(currentRun.runId);
-      void fetch(`${ANALYSIS_API_BASE_URL}/runs/${currentRun.runId}/checkpoint/continue`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action: "continue_without_login" }),
-      }).catch(() => {
+      void continueCheckpointRun(currentRun.runId, "continue_without_login").catch(() => {
         setLoginDecisionHandled(null);
       });
       return;
@@ -154,13 +180,7 @@ export function RunView({
 
     const timeout = window.setTimeout(() => {
       setLoginDecisionHandled(currentRun.runId);
-      void fetch(`${ANALYSIS_API_BASE_URL}/runs/${currentRun.runId}/checkpoint/continue`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action: "continue_without_login" }),
-      }).catch(() => {
+      void continueCheckpointRun(currentRun.runId, "continue_without_login").catch(() => {
         setLoginDecisionHandled(null);
       });
     }, fallbackAt - Date.now());
@@ -202,23 +222,10 @@ export function RunView({
             setLoginDecisionHandled(currentRun.runId);
             try {
               if (action === "continue_after_login") {
-                const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${currentRun.runId}/checkpoint/login-run`, {
-                  method: "POST",
-                });
-                const nextRun = (await response.json()) as AnalysisRun & { error?: string };
-                if (!response.ok) {
-                  throw new Error(nextRun.error ?? "Failed to create login session");
-                }
-                onReplaceRun(nextRun);
+                onReplaceRun(await startLoginSessionRun(currentRun.runId));
                 return;
               }
-              await fetch(`${ANALYSIS_API_BASE_URL}/runs/${currentRun.runId}/checkpoint/continue`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ action }),
-              });
+              await continueCheckpointRun(currentRun.runId, action);
             } catch {
               setLoginDecisionHandled(null);
             }
@@ -226,8 +233,8 @@ export function RunView({
         />
       ) : null}
       <section className="grid gap-4 float-in">
-      <div className={`grid gap-2 ${showHeroPreview ? "lg:grid-cols-[minmax(0,1.72fr)_minmax(280px,0.78fr)]" : ""}`}>
-        <article className="glass-surface glass-hover flex min-h-[190px] flex-col rounded-[1rem] px-4 py-3">
+      <div className={`run-command-grid grid gap-2 ${showHeroPreview ? "lg:grid-cols-[minmax(0,1.72fr)_minmax(280px,0.78fr)]" : ""}`}>
+        <article className="workspace-hero glass-surface glass-hover flex min-h-[190px] flex-col rounded-[1rem] px-4 py-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-[0.3em] text-cyan-300">Workspace</p>
@@ -257,7 +264,7 @@ export function RunView({
         </article>
 
         {showHeroPreview ? (
-          <article className="glass-surface glass-hover flex min-h-[190px] flex-col overflow-hidden rounded-[1rem] p-2">
+          <article className="workspace-preview glass-surface glass-hover flex min-h-[190px] flex-col overflow-hidden rounded-[1rem] p-2">
             <div className="depth-panel flex items-start justify-between gap-2 rounded-[0.8rem] px-3 py-2">
               <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-300">Live preview</p>
@@ -311,6 +318,7 @@ export function RunView({
         elapsedSeconds={elapsedSeconds}
         remainingSeconds={remainingSeconds}
         onRetryRun={onRetryRun}
+        onReplaceRun={onReplaceRun}
       />
     </section>
     {previewModalOpen ? (
@@ -331,11 +339,13 @@ function RunTracker({
   elapsedSeconds,
   remainingSeconds,
   onRetryRun,
+  onReplaceRun,
 }: {
   run: AnalysisRun | null;
   elapsedSeconds: number;
   remainingSeconds: number | null;
   onRetryRun: (runId: string) => Promise<void>;
+  onReplaceRun: (run: AnalysisRun) => void;
 }) {
   const [checkpointLoading, setCheckpointLoading] = useState(false);
   const [retryLoading, setRetryLoading] = useState(false);
@@ -454,15 +464,18 @@ function RunTracker({
   });
 
   const continueCheckpoint = async (action: "continue_without_login" | "continue_after_login" = "continue_after_login") => {
+    if (!run) {
+      return;
+    }
+
     try {
       setCheckpointLoading(true);
-      await fetch(`${ANALYSIS_API_BASE_URL}/runs/${run.runId}/checkpoint/continue`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action }),
-      });
+      if (run.progress.checkpoint?.kind === "login_choice" && action === "continue_after_login") {
+        onReplaceRun(await startLoginSessionRun(run.runId));
+        return;
+      }
+
+      await continueCheckpointRun(run.runId, action);
     } finally {
       setCheckpointLoading(false);
     }
@@ -485,8 +498,8 @@ function RunTracker({
   };
 
   return (
-      <article className="glass-surface grid gap-4 rounded-[1.8rem] p-4 sm:p-6">
-      <div className="glass-surface sticky top-4 z-20 rounded-[1rem] px-3 py-2.5">
+      <article className="run-observability-shell glass-surface grid gap-4 rounded-[1.8rem] p-4 sm:p-6">
+      <div className="run-sticky-console glass-surface sticky top-4 z-20 rounded-[1rem] px-3 py-2.5">
         <div className="grid gap-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -532,7 +545,7 @@ function RunTracker({
                     {checkpointLoading
                       ? "Resuming..."
                       : run.progress.checkpoint?.kind === "login_choice"
-                        ? "I completed login"
+                        ? "Open login session"
                         : "Continue checkpoint"}
                   </button>
                 </div>
@@ -549,34 +562,30 @@ function RunTracker({
             </div>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-4">
+          <div className="metric-grid grid gap-2 sm:grid-cols-4">
             <RuntimeGraphCard
-              label="Pages scanned"
+              label="Pages Scanned"
               value={`${pagesFound} ${pagesFound === 1 ? "page" : "pages"}`}
-              accent="cyan"
+              accent="neutral"
               points={pageTrend}
-              hint="Pages the run reached during this scan."
             />
             <RuntimeGraphCard
-              label="Interactions checked"
+              label="Interactions Checked"
               value={interactionsDetected > 0 ? `${interactionsTested} of ${interactionsDetected}` : String(interactionsTested)}
-              accent="emerald"
+              accent="info"
               points={testedTrend}
-              hint="Checks completed on buttons, links, forms, or other interactive elements."
             />
             <RuntimeGraphCard
-              label="Issues found"
+              label="Issues Found"
               value={failuresFound === 0 ? "No issues" : `${failuresFound} issue${failuresFound === 1 ? "" : "s"}`}
-              accent="rose"
+              accent={failuresFound === 0 ? "success" : "error"}
               points={failureTrend}
-              hint="Repeated problems or grouped failures found during the run."
             />
             <RuntimeGraphCard
-              label="Run duration"
+              label="Run Duration"
               value={`${formatReadableDuration(elapsedSeconds)}${remainingSeconds === null ? "" : ` · ${formatReadableDuration(remainingSeconds)} left`}`}
-              accent="amber"
+              accent="warning"
               points={timeTrend}
-              hint="How long the run has taken, plus time left when an estimate is available."
             />
           </div>
         </div>
@@ -610,7 +619,6 @@ function RunTracker({
       <div className="grid gap-3 xl:hidden">
           <MobileAccordionSection
             title="Captured data"
-            description="Pages, paths, and page details"
             open={mobileSectionsOpen.collected}
             onToggle={() => toggleMobileSection("collected")}
             headerCenterContent={
@@ -643,7 +651,6 @@ function RunTracker({
           </MobileAccordionSection>
         <MobileAccordionSection
             title="Activity logs"
-            description="What the system is doing"
             open={mobileSectionsOpen.timeline}
             onToggle={() => toggleMobileSection("timeline")}
             headerCenterContent={
@@ -764,19 +771,19 @@ function CollectedPane({
     .slice(0, 8);
 
       return (
-        <div className="grid h-full min-h-0 gap-2">
-          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="rounded-[0.9rem] border border-white/10 bg-slate-950/60 p-2.5">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Run status</p>
-            <p className="mt-1 text-[13px] font-semibold text-white">{humanizeStageTitle(run)}</p>
-            <p className="mt-1 text-[12px] text-slate-300">{humanizeStageSummary(run)}</p>
-            <p className="mt-1 line-clamp-2 text-[10px] text-slate-500">{humanizeStageTechnical(run)}</p>
+        <div className="grid h-full min-h-0 gap-4">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+            <p className="enterprise-label text-cyan-700">Run status</p>
+            <p className="mt-2 text-base font-semibold text-slate-900">{humanizeStageTitle(run)}</p>
+            <p className="mt-2 text-[15px] text-slate-700">{humanizeStageSummary(run)}</p>
+            <p className="mt-2 line-clamp-2 text-sm text-slate-500">{humanizeStageTechnical(run)}</p>
           </div>
 
-          <div className={`rounded-[0.9rem] border p-2.5 ${run.progress.lastSuccessfulAction ? "border-emerald-300/20 bg-emerald-400/10" : "border-white/10 bg-slate-950/60"}`}>
-            <p className={`text-[11px] uppercase tracking-[0.22em] ${run.progress.lastSuccessfulAction ? "text-emerald-200" : "text-slate-400"}`}>Last finished step</p>
-            <p className="mt-1 text-[13px] text-slate-100">{humanizeLastAction(run.progress.lastSuccessfulAction?.label)}</p>
-            <p className="mt-1 line-clamp-2 text-[10px] text-slate-400">
+          <div className={`rounded-[20px] border px-4 py-4 shadow-sm ${run.progress.lastSuccessfulAction ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+            <p className={`enterprise-label ${run.progress.lastSuccessfulAction ? "text-emerald-700" : "text-slate-500"}`}>Last finished step</p>
+            <p className="mt-2 text-base text-slate-900">{humanizeLastAction(run.progress.lastSuccessfulAction?.label)}</p>
+            <p className="mt-2 line-clamp-2 text-sm text-slate-500">
               {run.progress.lastSuccessfulAction?.pageUrl
                 ? `Page: ${routeFromUrl(run.progress.lastSuccessfulAction.pageUrl)}`
                 : "No completed step has been recorded yet."}
@@ -785,17 +792,17 @@ function CollectedPane({
         </div>
 
         {leftPaneTab === "tree" ? (
-          <div className="min-h-0 overflow-y-auto rounded-[0.9rem] border border-white/10 bg-[linear-gradient(180deg,rgba(2,6,23,0.76)_0%,rgba(15,23,42,0.82)_100%)] p-2.5">
+          <div className="min-h-0 overflow-y-auto rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">Pages visited</p>
-                <p className="mt-0.5 text-[10px] text-slate-500">This shows the pages the run reached.</p>
+                <p className="enterprise-label text-cyan-700">Pages visited</p>
+                <p className="mt-1 text-sm text-slate-500">This shows the pages the run reached.</p>
               </div>
-              <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-2.5 py-0.5 text-[10px] text-cyan-100">
+              <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-700">
                 {crawlTreeItems.length} {crawlTreeItems.length === 1 ? "page" : "pages"}
               </span>
             </div>
-            <div className="mt-2 grid gap-1.5">
+            <div className="mt-4 grid gap-2">
               {crawlTreeItems.slice(0, 18).map((page, index) => {
                 const isCurrent =
                   activePage?.url === page.url ||
@@ -808,34 +815,34 @@ function CollectedPane({
                 return (
                   <div
                     key={page.url}
-                    className={`relative overflow-hidden rounded-[0.9rem] border px-2.5 py-2 transition ${
+                    className={`relative overflow-hidden rounded-[16px] border px-4 py-3 transition ${
                       isCurrent
-                        ? "border-cyan-300/25 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(103,232,249,0.08)]"
-                        : "border-white/10 bg-white/[0.04]"
+                        ? "border-cyan-200 bg-cyan-50 shadow-[0_10px_24px_rgba(38,198,218,0.12)]"
+                        : "border-slate-200 bg-slate-50"
                     }`}
                     style={{ marginLeft: `${Math.max(page.depth, 0) * 10}px` }}
                   >
                     {page.depth > 0 ? (
                       <div
-                        className="absolute bottom-0 left-0 top-0 border-l border-dashed border-cyan-400/15"
+                        className="absolute bottom-0 left-0 top-0 border-l border-dashed border-cyan-300/40"
                         style={{ left: `${Math.max(page.depth, 0) * 10 - 6}px` }}
                       />
                     ) : null}
                     <div className="flex items-start gap-2">
                       <div className="mt-0.5 flex shrink-0 items-center gap-1.5">
-                        <span className={`h-2.5 w-2.5 rounded-full ${isCurrent ? "bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,0.55)]" : "bg-slate-500"}`} />
-                        <span className={`h-px w-3 ${hasNextSiblingDepth ? "bg-cyan-400/25" : "bg-white/10"}`} />
+                        <span className={`h-2.5 w-2.5 rounded-full ${isCurrent ? "bg-cyan-400 shadow-[0_0_12px_rgba(38,198,218,0.4)]" : "bg-slate-300"}`} />
+                        <span className={`h-px w-3 ${hasNextSiblingDepth ? "bg-cyan-300/50" : "bg-slate-200"}`} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <p className={`truncate text-[12px] ${isCurrent ? "font-medium text-white" : "text-slate-100"}`}>
+                          <p className={`truncate text-sm ${isCurrent ? "font-semibold text-slate-900" : "font-medium text-slate-800"}`}>
                             {friendlyPageName(page.title, page.url)}
                           </p>
-                          <span className="shrink-0 rounded-full border border-white/10 bg-slate-950/55 px-2 py-0.5 text-[9px] uppercase tracking-[0.16em] text-slate-400">
+                          <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-slate-500">
                             d{Math.max(page.depth, 0)}
                           </span>
                         </div>
-                        <p className={`mt-0.5 truncate text-[10px] ${isCurrent ? "text-cyan-200" : "text-slate-400"}`}>
+                        <p className={`mt-1 truncate text-xs ${isCurrent ? "text-cyan-700" : "text-slate-500"}`}>
                           {page.routePath}
                         </p>
                       </div>
@@ -850,13 +857,13 @@ function CollectedPane({
         {leftPaneTab === "data" ? (
           <div className="grid min-h-0 gap-2 overflow-y-auto pr-1">
             {activePage ? (
-              <div className="rounded-[0.9rem] border border-white/10 bg-slate-950/60 p-2.5">
+              <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-white">{activePage.title}</p>
-                    <p className="mt-1 truncate text-[11px] text-cyan-300">{activePage.routePath}</p>
+                    <p className="truncate text-base font-semibold text-slate-900">{activePage.title}</p>
+                    <p className="mt-1 truncate text-sm text-cyan-700">{activePage.routePath}</p>
                   </div>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] text-slate-300">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
                     {activePage.interactiveCount}
                   </span>
                 </div>
@@ -875,17 +882,17 @@ function CollectedPane({
         {leftPaneTab === "findings" ? (
           <div className="grid min-h-0 gap-2 overflow-y-auto pr-1">
             {findings.length > 0 ? findings.map((item) => (
-              <div key={item.clusterId} className="rounded-[0.9rem] border border-rose-300/15 bg-[linear-gradient(135deg,rgba(63,28,45,0.42)_0%,rgba(15,23,42,0.82)_100%)] p-2.5">
+              <div key={item.clusterId} className="rounded-[20px] border border-red-200 bg-red-50 p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-[12px] font-semibold text-white">{item.title}</p>
-                  <span className="rounded-full border border-rose-300/20 bg-rose-400/10 px-2.5 py-0.5 text-[11px] text-rose-200">
+                  <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                  <span className="rounded-full border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700">
                     {item.occurrences}
                   </span>
                 </div>
-                <p className="mt-1 text-[10px] text-slate-300">{item.summary}</p>
+                <p className="mt-2 text-sm text-slate-600">{item.summary}</p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {item.pages.slice(0, 3).map((page) => (
-                    <span key={page} className="rounded-full border border-white/10 bg-slate-950/55 px-2.5 py-0.5 text-[10px] text-slate-300">
+                    <span key={page} className="rounded-full border border-red-200 bg-white px-2.5 py-0.5 text-xs text-slate-600">
                       {routeFromUrl(page)}
                     </span>
                   ))}
@@ -1386,7 +1393,6 @@ function TimelinePane({
 
 function MobileAccordionSection({
   title,
-  description,
   open,
   onToggle,
   headerCenterContent,
@@ -1394,7 +1400,6 @@ function MobileAccordionSection({
   children,
 }: {
   title: string;
-  description: string;
   open: boolean;
   onToggle: () => void;
   headerCenterContent?: React.ReactNode;
@@ -1402,15 +1407,14 @@ function MobileAccordionSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-slate-900/60">
+    <section className="enterprise-card rounded-[20px] border">
       <div className="grid items-center gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <button
           type="button"
           onClick={onToggle}
           className="text-left"
         >
-          <p className="text-sm font-medium text-white">{title}</p>
-          <p className="mt-1 text-xs text-slate-400">{description}</p>
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
         </button>
         {headerCenterContent ? (
           <div className="justify-self-center overflow-x-auto">{headerCenterContent}</div>
@@ -1419,14 +1423,14 @@ function MobileAccordionSection({
           <button
             type="button"
             onClick={onToggle}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300"
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:bg-cyan-50"
           >
             {open ? "Hide" : "Show"}
           </button>
           {headerRightContent}
         </div>
       </div>
-      {open ? <div className="border-t border-white/10 p-4 fade-in-up">{children}</div> : null}
+      {open ? <div className="border-t border-slate-200 p-4 fade-in-up">{children}</div> : null}
     </section>
   );
 }
@@ -1436,48 +1440,44 @@ function RuntimeGraphCard({
   value,
   accent,
   points,
-  hint,
 }: {
   label: string;
   value: string;
-  accent: "cyan" | "emerald" | "rose" | "amber";
+  accent: "neutral" | "info" | "success" | "error" | "warning";
   points: string;
-  hint: string;
 }) {
-  const toneClass =
-    accent === "emerald"
-      ? "border-emerald-300/15 bg-emerald-400/8 text-emerald-200"
-      : accent === "rose"
-        ? "border-rose-300/15 bg-rose-400/8 text-rose-200"
-        : accent === "amber"
-          ? "border-amber-300/15 bg-amber-400/8 text-amber-200"
-          : "border-cyan-300/15 bg-cyan-400/8 text-cyan-200";
+  const tone = {
+    neutral: { icon: "PG", color: "#64748B", bg: "rgba(100,116,139,0.1)" },
+    info: { icon: "IN", color: "#26C6DA", bg: "rgba(38,198,218,0.12)" },
+    success: { icon: "OK", color: "#22C55E", bg: "rgba(34,197,94,0.12)" },
+    error: { icon: "ER", color: "#EF4444", bg: "rgba(239,68,68,0.12)" },
+    warning: { icon: "TM", color: "#F59E0B", bg: "rgba(245,158,11,0.12)" },
+  }[accent];
 
   return (
-    <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] uppercase tracking-[0.18em]">{label}</p>
-        <p className="text-sm font-semibold text-white">{value}</p>
+    <div className="enterprise-card rounded-[20px] border px-4 py-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(0,0,0,0.09)]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="enterprise-label">{label}</p>
+          <p className="mt-3 break-words text-[2.25rem] font-bold leading-none text-slate-900">{value}</p>
+        </div>
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[11px] font-bold"
+          style={{ backgroundColor: tone.bg, color: tone.color }}
+        >
+          {tone.icon}
+        </span>
       </div>
       <svg viewBox="0 0 100 24" className="mt-1.5 h-6 w-full">
         <polyline
           fill="none"
-          stroke={
-            accent === "rose"
-              ? "#fda4af"
-              : accent === "amber"
-                ? "#fcd34d"
-                : accent === "emerald"
-                  ? "#6ee7b7"
-                  : "#67e8f9"
-          }
+          stroke={tone.color}
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
           points={points}
         />
       </svg>
-      <p className="mt-1 text-[11px] leading-5 text-slate-400">{hint}</p>
     </div>
   );
 }
@@ -1560,11 +1560,11 @@ function StickyChip({ label, value, tone }: { label: string; value: string; tone
 
 function CompactList({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="rounded-[0.85rem] border border-white/10 bg-slate-900/55 p-2.5">
-      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">{title}</p>
+    <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">{title}</p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {items.length > 0 ? items.slice(0, 8).map((item, index) => (
-          <span key={`${index}-${item}`} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[10px] text-slate-300">
+          <span key={`${index}-${item}`} className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[10px] text-slate-600">
             {item}
           </span>
         )) : <span className="text-xs text-slate-500">None</span>}
@@ -1617,6 +1617,7 @@ function LoginDecisionModal({
     ? Math.min(new Date(run.progress.checkpoint.expiresAt).getTime(), new Date(run.updatedAt).getTime() + 120_000)
     : new Date(run.updatedAt).getTime() + 120_000;
   const remainingSeconds = Math.max(0, Math.ceil((fallbackAt - now) / 1000));
+  const autoContinueWithoutLogin = run.progress.checkpoint?.autoContinueWithoutLogin === true;
 
   const modal = (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/82 px-3 py-4 sm:px-4 sm:py-6 backdrop-blur-md">
@@ -1628,9 +1629,19 @@ function LoginDecisionModal({
             {run.progress.checkpoint?.instructions}
           </p>
           <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-amber-200">Auto continue timer</p>
-            <p className="mt-2 text-base font-semibold text-white sm:text-lg">{formatDuration(remainingSeconds)}</p>
-            <p className="mt-1 text-xs text-amber-100/80">If there is no response within 2 minutes, the run continues without login.</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-amber-200">
+              {autoContinueWithoutLogin ? "Auto continue timer" : "Crawler login required"}
+            </p>
+            {autoContinueWithoutLogin ? (
+              <>
+                <p className="mt-2 text-base font-semibold text-white sm:text-lg">{formatDuration(remainingSeconds)}</p>
+                <p className="mt-1 text-xs text-amber-100/80">If there is no response, the run continues without login.</p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-amber-100/85">
+                Logging into the site in another browser does not authenticate this crawler run. Open the login session to sign in inside the crawler browser.
+              </p>
+            )}
           </div>
         </div>
         <div className="mt-4 flex flex-col gap-2.5 border-t border-white/10 pt-4 sm:flex-row sm:justify-end">
@@ -1648,7 +1659,7 @@ function LoginDecisionModal({
             onClick={() => void onChoose("continue_after_login")}
             className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-100"
           >
-            {loading ? "Continuing..." : "Continue with login"}
+            {loading ? "Continuing..." : "Open login session"}
           </button>
         </div>
       </div>

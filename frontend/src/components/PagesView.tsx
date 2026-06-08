@@ -78,9 +78,7 @@ export function PagesView({ result, filters }: PagesViewProps) {
     return (
       <EmptyStatePanel
         title="No pages in this slice"
-        description="The crawl data exists, but the current route filter or search query removed every visible page."
         actionLabel="Try"
-        actionHint="Reset filters or clear the search."
         tone="active"
       />
     );

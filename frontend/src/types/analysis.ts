@@ -195,6 +195,7 @@ export type AnalysisSubmission = {
       instructions?: string;
       checkpointLabel?: string;
       timeoutSeconds?: number;
+      autoContinueWithoutLogin?: boolean;
     };
   };
 };
@@ -261,6 +262,7 @@ export type AnalysisRun = {
       expiresAt?: string;
       loginUrl?: string;
       allowedActions?: Array<"continue_without_login" | "continue_after_login">;
+      autoContinueWithoutLogin?: boolean;
     };
     liveSession?: {
       url: string;
