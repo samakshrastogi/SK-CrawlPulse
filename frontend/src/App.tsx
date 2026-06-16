@@ -127,6 +127,16 @@ const parseGoogleCredential = (idToken: string): Pick<AuthSession, "email" | "na
   }
 };
 
+const getUserInitials = (name: string | undefined, email: string) => {
+  const parts = (name || email.split("@")[0] || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const first = parts[0]?.charAt(0) ?? email.charAt(0);
+  const last = parts.length > 1 ? parts[parts.length - 1]?.charAt(0) : parts[0]?.charAt(1);
+  return `${first ?? ""}${last ?? ""}`.toUpperCase();
+};
+
 export default function App() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => {
     try {
@@ -839,10 +849,11 @@ export default function App() {
               </div>
               <button
                 type="button"
-                onClick={() => setMobileNavOpen(true)}
-                className="control-surface rounded-full px-3 py-2 text-xs font-semibold text-slate-300"
+                onClick={() => setActiveView("profile")}
+                className="profile-mark flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                aria-label="Open profile"
               >
-                Menu
+                {getUserInitials(authSession.name, authSession.email)}
               </button>
             </div>
           </header>
@@ -853,7 +864,7 @@ export default function App() {
             unreadCount={unreadNotifications}
             onMarkNotificationRead={markNotificationRead}
             onMarkAllNotificationsRead={markAllNotificationsRead}
-            onSignOut={signOut}
+            onOpenProfile={() => setActiveView("profile")}
           />
 
           <div className="workspace-layout grid min-w-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
@@ -866,7 +877,7 @@ export default function App() {
             />
 
             <div className="workspace-stage grid min-w-0 gap-4">
-              {activeView !== "run" ? (
+              {activeView !== "run" && activeView !== "profile" ? (
                 <TopStatusStrip
                   activeView={activeView}
                   currentRun={filteredCurrentRun}
@@ -897,7 +908,7 @@ export default function App() {
         onProfile={() => setActiveView("profile")}
       />
 
-      <AssistantPanel run={currentRun} />
+      <AssistantPanel run={currentRun} historyRuns={historyRuns} savedProjects={savedProjects} />
     </main>
   );
 }

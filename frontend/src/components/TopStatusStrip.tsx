@@ -24,14 +24,8 @@ export function TopStatusStrip({
           title: currentRun.progress.pagesPreview[0].title,
           html: currentRun.progress.pagesPreview[0].htmlPreview,
           previewImageUrl: currentRun.progress.pagesPreview[0].previewImageUrl,
-        }
+      }
       : null);
-  const pageCount = result?.frontend.pages.length ?? currentRun?.pages.length ?? currentRun?.progress.pagesDiscovered ?? 0;
-  const findingCount =
-    result?.frontend.runtimeFindings.length ??
-    (currentRun?.failureClusters.length ?? 0);
-  const coverageValue = result?.frontend.coverageReport.coverage ?? "--";
-  const runStatus = currentRun?.status ? formatStatus(currentRun.status) : "No run selected";
 
   return (
     <section className="status-strip-shell command-panel rounded-[1.3rem] border border-white/10 bg-[linear-gradient(135deg,rgba(2,6,23,0.96)_0%,rgba(15,23,42,0.86)_48%,rgba(8,47,73,0.45)_100%)] px-5 py-3.5 shadow-[0_14px_38px_rgba(2,6,23,0.24)]">
@@ -131,31 +125,8 @@ export function TopStatusStrip({
           </div>
         )}
       </div>
-      <div className="workspace-kpi-row grid gap-3 md:grid-cols-4">
-        <WorkspaceKpi label="Run health" value={runStatus} tone={currentRun?.status === "failed" ? "error" : currentRun?.status === "completed" ? "success" : "info"} />
-        <WorkspaceKpi label="Coverage" value={coverageValue} tone="info" />
-        <WorkspaceKpi label="Routes" value={String(pageCount)} tone="neutral" />
-        <WorkspaceKpi label="Findings" value={String(findingCount)} tone={findingCount > 0 ? "error" : "success"} />
-      </div>
       </div>
     </section>
-  );
-}
-
-function WorkspaceKpi({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "neutral" | "info" | "success" | "error";
-}) {
-  return (
-    <div className={`workspace-kpi-card workspace-kpi-${tone} rounded-[1rem] border px-4 py-3`}>
-      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-lg font-bold text-white">{value}</p>
-    </div>
   );
 }
 
@@ -165,10 +136,6 @@ function routeFromUrl(value: string) {
   } catch {
     return value;
   }
-}
-
-function formatStatus(status: AnalysisRun["status"]) {
-  return status.replace(/_/g, " ");
 }
 
 function labelForView(view: AppView) {

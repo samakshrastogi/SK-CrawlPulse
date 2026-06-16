@@ -1571,6 +1571,22 @@ body,
   color: rgba(165, 243, 252, 0.95) !important;
 }
 
+:root[data-theme="light"] .navigation-console .sidebar-context-card,
+:root[data-theme="light"] .navigation-console .sidebar-context-card h2,
+:root[data-theme="light"] .navigation-console .sidebar-context-card p,
+:root[data-theme="light"] .navigation-console .sidebar-context-card span {
+  color: #FFFFFF !important;
+}
+
+:root[data-theme="light"] .navigation-console .sidebar-context-card {
+  background:
+    linear-gradient(135deg, #0F3B4A 0%, #15616D 54%, #26C6DA 100%) !important;
+}
+
+:root[data-theme="light"] .navigation-console .sidebar-context-card p:first-child {
+  color: #CFFAFE !important;
+}
+
 :root[data-theme="light"] .sidebar-insight-panel p {
   color: var(--cp-muted) !important;
 }
@@ -1697,6 +1713,26 @@ body,
 :root[data-theme="light"] .workspace-sidebar button.enterprise-nav-active.segmented-option,
 :root[data-theme="light"] .workspace-sidebar button.enterprise-nav-active.segmented-option span {
   color: #FFFFFF !important;
+}
+
+:root[data-theme="light"] .assistant-panel > header,
+:root[data-theme="light"] .assistant-panel > header h2,
+:root[data-theme="light"] .assistant-panel > header .text-white,
+:root[data-theme="light"] .assistant-panel > header .text-slate-200,
+:root[data-theme="light"] .assistant-panel > header .text-slate-300,
+:root[data-theme="light"] .assistant-panel > header .text-cyan-100,
+:root[data-theme="light"] .assistant-panel > header .text-cyan-200,
+:root[data-theme="light"] .assistant-panel button.bg-\[\#081225\] {
+  color: #FFFFFF !important;
+}
+
+:root[data-theme="light"] .assistant-panel > header .text-slate-400 {
+  color: rgba(226, 232, 240, 0.72) !important;
+}
+
+:root[data-theme="light"] .assistant-panel .bg-\[\#081225\],
+:root[data-theme="light"] .assistant-panel button.bg-\[\#081225\] {
+  background-color: #081225 !important;
 }
 
 @media (max-width: 767px) {

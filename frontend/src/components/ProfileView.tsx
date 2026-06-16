@@ -48,7 +48,7 @@ const toHostname = (targetUrl: string) => {
 };
 
 export function ProfileView({ user, runs, savedProjects, onSignOut }: ProfileViewProps) {
-  const initial = (user.name || user.email).charAt(0).toUpperCase();
+  const initials = getUserInitials(user.name, user.email);
   const completedRuns = runs.filter((run) => run.status === "completed").length;
   const failedRuns = runs.filter((run) => run.status === "failed").length;
   const latestRun = runs[0];
@@ -70,7 +70,7 @@ export function ProfileView({ user, runs, savedProjects, onSignOut }: ProfileVie
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-4">
             <div className="profile-mark flex h-20 w-20 shrink-0 items-center justify-center rounded-[1.35rem] text-3xl font-bold text-white">
-              {initial}
+              {initials}
             </div>
             <div className="min-w-0">
               <p className="enterprise-label text-cyan-700">User profile</p>
@@ -171,6 +171,16 @@ export function ProfileView({ user, runs, savedProjects, onSignOut }: ProfileVie
       </article>
     </section>
   );
+}
+
+function getUserInitials(name: string | undefined, email: string) {
+  const parts = (name || email.split("@")[0] || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const first = parts[0]?.charAt(0) ?? email.charAt(0);
+  const last = parts.length > 1 ? parts[parts.length - 1]?.charAt(0) : parts[0]?.charAt(1);
+  return `${first ?? ""}${last ?? ""}`.toUpperCase();
 }
 
 function ProfileField({ label, value }: { label: string; value: string }) {
