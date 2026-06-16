@@ -26,6 +26,20 @@ const readNumber = (key: string): number => {
   return parsed;
 };
 
+const readOptionalNumber = (key: string, fallback: number): number => {
+  const value = readOptionalString(key);
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid numeric environment variable: ${key}`);
+  }
+
+  return parsed;
+};
+
 const readBoolean = (key: string): boolean => {
   const value = readString(key).toLowerCase();
   if (value !== "true" && value !== "false") {
@@ -35,9 +49,29 @@ const readBoolean = (key: string): boolean => {
   return value === "true";
 };
 
+const readOptionalBoolean = (key: string, fallback: boolean): boolean => {
+  const value = readOptionalString(key);
+  if (!value) {
+    return fallback;
+  }
+
+  const normalized = value.toLowerCase();
+  if (normalized !== "true" && normalized !== "false") {
+    throw new Error(`Invalid boolean environment variable: ${key}`);
+  }
+
+  return normalized === "true";
+};
+
 const readList = (key: string): string[] =>
   readString(key)
     .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const readOrigins = (key: string): string[] =>
+  readString(key)
+    .split(/[|,]/)
     .map((item) => item.trim())
     .filter(Boolean);
 
@@ -57,13 +91,23 @@ export const env = {
     serviceName: readString("SERVICE_NAME"),
     artifactsDir: readString("ARTIFACTS_DIR"),
     artifactsPublicRoute: normalizeRoute(readString("ARTIFACTS_PUBLIC_ROUTE")),
-    corsOrigin: readString("CORS_ORIGIN"),
+    corsOrigins: readOrigins("CORS_ORIGIN"),
     corsCredentials: readBoolean("CORS_CREDENTIALS"),
     jsonBodyLimit: readString("JSON_BODY_LIMIT"),
     analysisApiRoute: normalizeRoute(readString("API_ANALYSIS_ROUTE")),
   },
   secrets: {
     mongoUri: readString("MONGO_URI"),
+  },
+  mail: {
+    smtpHost: readOptionalString("SMTP_HOST"),
+    smtpPort: readOptionalNumber("SMTP_PORT", 587),
+    smtpSecure: readOptionalBoolean("SMTP_SECURE", false),
+    smtpUser: readOptionalString("SMTP_USER"),
+    smtpPass: readOptionalString("SMTP_PASS"),
+    fromEmail: readOptionalString("OTP_FROM_EMAIL") ?? "SK CrawlPulse <no-reply@sk-crawlpulse.local>",
+    otpTtlMinutes: readOptionalNumber("OTP_TTL_MINUTES", 10),
+    otpResendSeconds: readOptionalNumber("OTP_RESEND_SECONDS", 60),
   },
   database: {
     maxPoolSize: readNumber("MONGO_MAX_POOL_SIZE"),
@@ -113,7 +157,7 @@ export const publicRuntimeEnv = {
   serviceName: env.runtime.serviceName,
   artifactsDir: env.runtime.artifactsDir,
   artifactsPublicRoute: env.runtime.artifactsPublicRoute,
-  corsOrigin: env.runtime.corsOrigin,
+  corsOrigin: env.runtime.corsOrigins.join("|"),
   corsCredentials: env.runtime.corsCredentials,
   jsonBodyLimit: env.runtime.jsonBodyLimit,
   analysisApiRoute: env.runtime.analysisApiRoute,

@@ -3,13 +3,35 @@ import cors from "cors";
 import express from "express";
 import { env } from "./config/env";
 import { analysisRouter } from "./routes/analysis";
+import { authRouter } from "./routes/auth";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 const app = express();
+const localhostOriginPattern = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
+const configuredCorsOrigins = new Set(env.runtime.corsOrigins);
+const allowAnyCorsOrigin = configuredCorsOrigins.has("*");
+const allowLocalhostDevOrigins = env.runtime.nodeEnv === "development";
+
+const resolveCorsOrigin = (
+  requestOrigin: string | undefined,
+  callback: (error: Error | null, allow?: boolean) => void,
+) => {
+  if (!requestOrigin || allowAnyCorsOrigin || configuredCorsOrigins.has(requestOrigin)) {
+    callback(null, true);
+    return;
+  }
+
+  if (allowLocalhostDevOrigins && localhostOriginPattern.test(requestOrigin)) {
+    callback(null, true);
+    return;
+  }
+
+  callback(null, false);
+};
 
 app.use(
   cors({
-    origin: env.runtime.corsOrigin === "*" ? true : env.runtime.corsOrigin,
+    origin: resolveCorsOrigin,
     credentials: env.runtime.corsCredentials,
   }),
 );
@@ -24,6 +46,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.use("/api/auth", authRouter);
 app.use(env.runtime.analysisApiRoute, analysisRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);

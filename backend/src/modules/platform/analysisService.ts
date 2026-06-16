@@ -965,10 +965,19 @@ const drainQueue = async () => {
   }
 };
 
+const runQueueTick = async () => {
+  try {
+    await resetExpiredAnalysisRuns();
+    await drainQueue();
+  } catch (error) {
+    console.warn(`[analysis-worker] queue tick skipped: ${toErrorMessage(error)}`);
+  }
+};
+
 export const initializeAnalysisWorker = () => {
-  void resetExpiredAnalysisRuns().then(() => drainQueue());
+  void runQueueTick();
   setInterval(() => {
-    void resetExpiredAnalysisRuns().then(() => drainQueue());
+    void runQueueTick();
   }, env.analysis.queuePollIntervalMs);
 };
 
