@@ -120,6 +120,7 @@ const trimStringList = (values: string[] | undefined, maxItems = MAX_COLLECTION_
 
 const sanitizePageAnalysis = (page: PageAnalysis): PageAnalysis => ({
   ...page,
+  deviceName: page.deviceName ?? "Desktop",
   headings: trimStringList(page.headings, 40, 240),
   discoveredLinks: trimStringList(page.discoveredLinks, 120, 500),
   interactionNotes: trimStringList(page.interactionNotes, 80, 500),
@@ -458,10 +459,11 @@ export const persistAnalysisPage = async ({
   const sanitizedPage = sanitizePageAnalysis(page);
   await withMongoRetry(`persistAnalysisPage:${runId}:${page.url}`, () =>
     AnalysisPageModel.findOneAndUpdate(
-      { runId, url: page.url },
+      { runId, deviceName: sanitizedPage.deviceName ?? "Desktop", url: page.url },
       {
         $set: {
           targetDomain: getTargetDomain(request),
+          deviceName: sanitizedPage.deviceName ?? "Desktop",
           routePath: sanitizedPage.routePath,
           depth: sanitizedPage.depth,
           snapshot: sanitizedPage,
@@ -493,10 +495,11 @@ export const persistAnalysisPages = async ({
     AnalysisPageModel.bulkWrite(
       sanitizedPages.map((page) => ({
         updateOne: {
-          filter: { runId, url: page.url },
+          filter: { runId, deviceName: page.deviceName ?? "Desktop", url: page.url },
           update: {
             $set: {
               targetDomain: getTargetDomain(request),
+              deviceName: page.deviceName ?? "Desktop",
               routePath: page.routePath,
               depth: page.depth,
               snapshot: page,

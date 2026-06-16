@@ -104,8 +104,16 @@ export const env = {
     resendEndpoint: readOptionalString("RESEND_API_ENDPOINT") ?? "https://api.resend.com/emails",
     fromEmail: readOptionalString("RESEND_FROM_EMAIL") ?? "SK CrawlPulse <onboarding@resend.dev>",
     replyToEmail: readOptionalString("RESEND_REPLY_TO_EMAIL"),
+    smtpHost: readOptionalString("SMTP_HOST"),
+    smtpPort: readOptionalNumber("SMTP_PORT", 587),
+    smtpSecure: readOptionalBoolean("SMTP_SECURE", false),
+    smtpUser: readOptionalString("SMTP_USER"),
+    smtpPass: readOptionalString("SMTP_PASS"),
     otpTtlMinutes: readOptionalNumber("OTP_TTL_MINUTES", 10),
     otpResendSeconds: readOptionalNumber("OTP_RESEND_SECONDS", 60),
+  },
+  slack: {
+    webhookUrl: readOptionalString("SLACK_WEBHOOK_URL"),
   },
   database: {
     maxPoolSize: readNumber("MONGO_MAX_POOL_SIZE"),

@@ -12,6 +12,7 @@ import { OverviewView } from "./components/OverviewView";
 import { PagesView } from "./components/PagesView";
 import { ProfileView } from "./components/ProfileView";
 import { ReportView } from "./components/ReportView";
+import { AssistantPanel } from "./components/AssistantPanel";
 import { RunView } from "./components/RunView";
 import { TestsView } from "./components/TestsView";
 import { TopBar } from "./components/TopBar";
@@ -38,6 +39,7 @@ const createDefaultAnalysisOptions = (): AnalysisOptions => ({
   respectRobotsTxt: DEFAULT_ANALYSIS_OPTIONS.respectRobotsTxt,
   streamHtmlPreview: DEFAULT_ANALYSIS_OPTIONS.streamHtmlPreview,
   crawlProfile: DEFAULT_ANALYSIS_OPTIONS.crawlProfile,
+  mobileDevices: ["Desktop"],
   strictBehaviorMode: DEFAULT_ANALYSIS_OPTIONS.strictBehaviorMode,
   promptForLogin: DEFAULT_ANALYSIS_OPTIONS.promptForLogin,
   loginPrompt: {
@@ -586,6 +588,8 @@ export default function App() {
         respectRobotsTxt: analysisOptions.respectRobotsTxt,
         streamHtmlPreview: analysisOptions.streamHtmlPreview,
         crawlProfile: analysisOptions.crawlProfile,
+        deviceProfile: analysisOptions.deviceProfile,
+        mobileDevices: analysisOptions.mobileDevices,
         strictBehaviorMode: analysisOptions.strictBehaviorMode,
         promptForLogin: analysisOptions.promptForLogin,
         loginPrompt: {
@@ -892,6 +896,8 @@ export default function App() {
         onSave={() => saveCurrentProject(true)}
         onProfile={() => setActiveView("profile")}
       />
+
+      <AssistantPanel run={currentRun} />
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import type { Response } from "express";
+import { env } from "../../config/env";
 import { NotificationModel } from "../../models/Notification";
 import type { AnalysisRunView } from "../../types/platform";
 import { escapeHtml, sendEmail } from "../mail/resendMailer";
@@ -11,6 +12,9 @@ export type NotificationKind =
   | "analysis_checkpoint"
   | "analysis_completed"
   | "analysis_failed"
+  | "analysis_critical"
+  | "analysis_regression"
+  | "analysis_security"
   | "analysis_retry"
   | "auth";
 
@@ -81,6 +85,44 @@ const buildEmailHtml = (notification: Pick<NotificationView, "title" | "message"
   </div>
 `;
 
+const sendSlackNotification = async (notification: Pick<NotificationView, "title" | "message" | "targetUrl" | "runId" | "kind">) => {
+  if (!env.slack.webhookUrl) {
+    return { skipped: true as const };
+  }
+
+  const text = [
+    `*${notification.title}*`,
+    notification.message,
+    notification.targetUrl ? `Target: ${notification.targetUrl}` : "",
+    notification.runId ? `Run ID: ${notification.runId}` : "",
+  ].filter(Boolean).join("\n");
+
+  const response = await fetch(env.slack.webhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text,
+          },
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Slack webhook failed with HTTP ${response.status}`);
+  }
+
+  return { skipped: false as const };
+};
+
 export const createNotification = async ({
   recipientEmail,
   recipientName,
@@ -136,6 +178,19 @@ export const createNotification = async ({
   await doc.save();
   view = toView(doc);
   publishNotificationEvent(view);
+
+  try {
+    await sendSlackNotification({
+      title,
+      message,
+      targetUrl,
+      runId,
+      kind,
+    });
+  } catch (error) {
+    console.warn(`[notifications] slack delivery failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   return view;
 };
 

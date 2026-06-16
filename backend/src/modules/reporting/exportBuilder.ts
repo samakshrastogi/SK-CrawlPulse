@@ -93,6 +93,9 @@ export const buildRunHtmlReport = (run: AnalysisRunView) => {
   const tests = result?.testCases ?? [];
   const report = result?.report;
   const coverage = result?.frontend.coverageReport;
+  const coverageScore = result?.frontend.coverageScore;
+  const securityFindings = result?.frontend.securityFindings ?? [];
+  const rootCauseAnalyses = result?.frontend.rootCauseAnalyses ?? [];
 
   return `<!doctype html>
 <html lang="en">
@@ -141,6 +144,8 @@ export const buildRunHtmlReport = (run: AnalysisRunView) => {
         <div class="metric">Interactions<strong>${escapeHtml(result?.frontend.interactionResults.length ?? run.interactions.length)}</strong></div>
         <div class="metric">Coverage<strong>${escapeHtml(coverage?.coverage ?? "0%")}</strong></div>
         <div class="metric">Findings<strong>${escapeHtml(findings.length)}</strong></div>
+        <div class="metric">Coverage score<strong>${escapeHtml(coverageScore?.overallScore ?? 0)}</strong></div>
+        <div class="metric">Security signals<strong>${escapeHtml(securityFindings.length)}</strong></div>
       </div>
     </section>
 
@@ -155,8 +160,38 @@ export const buildRunHtmlReport = (run: AnalysisRunView) => {
     </section>
 
     <section>
+      <h2>Root Cause Analysis</h2>
+      ${
+        rootCauseAnalyses.length > 0
+          ? rootCauseAnalyses
+              .slice(0, 20)
+              .map(
+                (analysis) => `
+                  <article class="card">
+                    <div class="meta">${escapeHtml(analysis.findingId)} / ${escapeHtml(analysis.confidenceScore)}%</div>
+                    <h3>${escapeHtml(analysis.probableRootCause)}</h3>
+                    <p><strong>Technical:</strong> ${escapeHtml(analysis.technicalExplanation)}</p>
+                    <p><strong>Impact:</strong> ${escapeHtml(analysis.userImpact)}</p>
+                    <p><strong>Fix:</strong> ${escapeHtml(analysis.suggestedFix)}</p>
+                  </article>`,
+              )
+              .join("")
+          : "<p class=\"muted\">No root cause analysis was generated.</p>"
+      }
+    </section>
+
+    <section>
       <h2>Backend and API</h2>
       <ul>${(result?.backendValidation.observations ?? ["No backend observations are available."]).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    </section>
+
+    <section>
+      <h2>Security Findings</h2>
+      ${
+        securityFindings.length > 0
+          ? `<ul>${securityFindings.slice(0, 20).map((finding) => `<li>${escapeHtml(finding.riskLevel)} ${escapeHtml(finding.category)} - ${escapeHtml(finding.requestUrl)}</li>`).join("")}</ul>`
+          : "<p class=\"muted\">No API security findings were generated.</p>"
+      }
     </section>
 
     <section>

@@ -22,7 +22,9 @@ export type FindingType =
   | "visual_regression"
   | "accessibility"
   | "api_contract"
-  | "boundary_limit";
+  | "boundary_limit"
+  | "api_security";
+export type MobileDeviceProfile = "Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad";
 export type ScenarioPackType =
   | "auth"
   | "search"
@@ -99,6 +101,8 @@ export interface AnalysisRequest {
     respectRobotsTxt?: boolean;
     streamHtmlPreview?: boolean;
     crawlProfile?: "auto" | "generic" | "youtube" | "ecommerce" | "dashboard" | "auth-heavy";
+    deviceProfile?: MobileDeviceProfile;
+    mobileDevices?: MobileDeviceProfile[];
     strictBehaviorMode?: boolean;
     promptForLogin?: boolean;
     loginPrompt?: LoginPromptConfig;
@@ -224,6 +228,7 @@ export interface PageAnalysis {
   interactionNotes: string[];
   previewImageUrl?: string;
   htmlPreview?: string;
+  deviceName?: MobileDeviceProfile;
 }
 
 export interface LivePagePreview {
@@ -257,6 +262,9 @@ export interface NetworkObservation {
   latencyMs?: number;
   contentType?: string;
   responseShape?: string[];
+  requestHeaders?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+  deviceName?: MobileDeviceProfile;
 }
 
 export interface FailureCluster {
@@ -280,6 +288,8 @@ export interface RuntimeFinding {
   evidence: string[];
   screenshotUrl?: string;
   relatedInteractionId?: string;
+  deviceName?: MobileDeviceProfile;
+  rootCause?: RootCauseAnalysis;
 }
 
 export interface ScenarioPackResult {
@@ -292,6 +302,7 @@ export interface ScenarioPackResult {
   details: string[];
   screenshotUrl?: string;
   suggestions: string[];
+  deviceName?: MobileDeviceProfile;
 }
 
 export interface ApiAssertion {
@@ -304,6 +315,7 @@ export interface ApiAssertion {
   passed: boolean;
   issues: string[];
   responseShape?: string[];
+  deviceName?: MobileDeviceProfile;
 }
 
 export interface FrontendAnalysis {
@@ -318,6 +330,10 @@ export interface FrontendAnalysis {
   runtimeFindings: RuntimeFinding[];
   scenarioResults: ScenarioPackResult[];
   apiAssertions: ApiAssertion[];
+  securityFindings: ApiSecurityFinding[];
+  coverageScore: ScanCoverageScore;
+  rootCauseAnalyses: RootCauseAnalysis[];
+  mobileComparison?: MobileComparisonSummary;
   warnings: string[];
 }
 
@@ -354,6 +370,7 @@ export interface InteractionResult {
   };
   screenshotPath?: string;
   screenshotUrl?: string;
+  deviceName?: MobileDeviceProfile;
 }
 
 export interface CoverageReport {
@@ -387,6 +404,62 @@ export interface GeneratedTestCase {
   confidence?: "high" | "medium" | "low";
   ownerHint?: string;
   evidenceItems?: string[];
+  deviceName?: MobileDeviceProfile;
+}
+
+export interface RootCauseAnalysis {
+  findingId: string;
+  probableRootCause: string;
+  technicalExplanation: string;
+  userImpact: string;
+  suggestedFix: string;
+  confidenceScore: number;
+  evidence: string[];
+}
+
+export interface ApiSecurityFinding {
+  securityFindingId: string;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  category:
+    | "unauthenticated_sensitive_endpoint"
+    | "missing_authentication_headers"
+    | "unsafe_cors"
+    | "sensitive_data_exposure"
+    | "error_spike"
+    | "missing_rate_limit_signal"
+    | "insecure_http_usage";
+  requestUrl: string;
+  method: string;
+  pageUrl?: string;
+  status?: number;
+  evidence: string[];
+  remediation: string;
+  deviceName?: MobileDeviceProfile;
+}
+
+export interface ScanCoverageScore {
+  pagesDiscovered: number;
+  pagesTested: number;
+  formsDetected: number;
+  formsTested: number;
+  buttonsDetected: number;
+  buttonsTested: number;
+  linksDetected: number;
+  linksValidated: number;
+  mobileDevicesTested: MobileDeviceProfile[];
+  apiEndpointsObserved: number;
+  apiEndpointsAnalyzed: number;
+  overallScore: number;
+}
+
+export interface MobileComparisonSummary {
+  devicesTested: MobileDeviceProfile[];
+  commonIssueIds: string[];
+  deviceOnlyIssues: Array<{
+    deviceName: MobileDeviceProfile;
+    findingIds: string[];
+  }>;
+  summary: string;
 }
 
 export interface BackendValidationResult {
@@ -420,6 +493,10 @@ export interface PlatformAnalysisResult {
   testCases: GeneratedTestCase[];
   backendValidation: BackendValidationResult;
   report: AnalysisReport;
+  rootCauseAnalyses: RootCauseAnalysis[];
+  securityFindings: ApiSecurityFinding[];
+  coverageScore: ScanCoverageScore;
+  mobileComparison?: MobileComparisonSummary;
 }
 
 export interface AnalysisRunView {

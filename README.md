@@ -21,6 +21,12 @@ Given a target URL, SK CrawlPulse can:
 - retry failed runs and resume around failed pages or interactions
 - raise login checkpoints and optionally continue in a dedicated headed login session
 - compare historical runs to review new, fixed, and persistent issues
+- generate AI-style root cause analysis for each runtime issue
+- ask the in-app assistant questions about a completed run
+- scan multiple mobile device profiles and compare the results
+- send Slack and email notifications for run events, critical issues, failures, and regressions
+- flag API security issues from captured network traffic
+- calculate a scan coverage score across pages, forms, buttons, links, devices, and API endpoints
 
 ## Tech stack
 
@@ -82,8 +88,19 @@ flowchart TD
   F --> G["Generate test cases"]
   G --> H["Build report"]
   H --> I["Persist run data"]
-  I --> J["Stream updates to UI"]
-  J --> K["Completed run available in dashboard"]
+ I --> J["Stream updates to UI"]
+ J --> K["Completed run available in dashboard"]
+```
+
+### Assistant and notification flow
+
+```mermaid
+flowchart TD
+  A["Run completes or changes state"] --> B["Generate root cause + security analysis"]
+  B --> C["Store report fields with the run"]
+  C --> D["Send Slack / email notification"]
+  C --> E["Expose data to chat assistant"]
+  E --> F["Answer run-aware question"]
 ```
 
 ### Login checkpoint flow
@@ -189,6 +206,8 @@ The platform produces:
 - scenario and boundary evidence
 - generated QA test cases
 - backend/API validation observations
+- root cause analyses and API security findings
+- coverage score and device comparison data
 - report sections and Mermaid flowchart content
 
 Generated file artifacts are written under `backend/artifacts/` and are intentionally ignored by Git.
@@ -215,9 +234,9 @@ flowchart TD
 
 ## Documentation and examples
 
-- [Project overview](C:/Users/samrasto/OneDrive%20-%20Nokia/Desktop/sk-testing/docs/project-overview.md)
-- [Sample report outline](C:/Users/samrasto/OneDrive%20-%20Nokia/Desktop/sk-testing/docs/examples/report-pdf-outline.md)
-- [Sample report payload](C:/Users/samrasto/OneDrive%20-%20Nokia/Desktop/sk-testing/docs/examples/report-example.json)
+- [Project overview](docs/project-overview.md)
+- [Sample report outline](docs/examples/report-pdf-outline.md)
+- [Sample report payload](docs/examples/report-example.json)
 
 ## Current limitations
 
@@ -227,10 +246,40 @@ flowchart TD
 - Some analysis behavior is heuristic by design and depends on the target website structure.
 - Large crawls and headed login flows can create substantial local artifacts.
 
+## Environment configuration
+
+The repository now includes example env files:
+
+- [backend/.env.example](C:/Users/samrasto/OneDrive%20-%20Nokia/Desktop/SK-CrawlPulse/backend/.env.example)
+- [frontend/.env.example](C:/Users/samrasto/OneDrive%20-%20Nokia/Desktop/SK-CrawlPulse/frontend/.env.example)
+
+Backend mail and notification support:
+
+- `RESEND_API_KEY`, `RESEND_API_ENDPOINT`, `RESEND_FROM_EMAIL`, and `RESEND_REPLY_TO_EMAIL` power server-side Resend delivery.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, and `SMTP_PASS` are available as a fallback delivery path.
+- `OTP_TTL_MINUTES` and `OTP_RESEND_SECONDS` control auth email verification timing.
+- `SLACK_WEBHOOK_URL` enables Slack webhook notifications.
+- Mail is sent by the backend. `RESEND_API_KEY` may be mirrored in frontend env files for local production-copy convenience, but it is intentionally not prefixed with `VITE_` and is not read by frontend code.
+
+Frontend runtime support:
+
+- `VITE_API_BASE_URL`
+- `VITE_ANALYSIS_API_PATH`
+- `VITE_GOOGLE_CLIENT_ID` for optional Google sign-in
+- `REACT_APP_VERSION` for deploy metadata compatibility
+- default scan profile values, login checkpoint settings, and crawl behavior defaults
+
+## New scan outputs
+
+- `coverageScore` now summarizes pages, forms, buttons, links, devices, and API endpoints
+- `rootCauseAnalyses` capture probable root cause, technical explanation, impact, fix, and confidence
+- `securityFindings` capture API traffic risks with remediation guidance
+- `mobileComparison` captures cross-device differences when multiple device profiles are scanned
+- mobile page snapshots are persisted per `runId + deviceName + url`, so the same route tested on several devices keeps separate evidence
+
 ## Suggested next improvements
 
-- add `backend/.env.example` and optional `frontend/.env.example`
 - add a root workspace script for install, dev, and build
 - add automated tests for API routes, orchestration, and key frontend views
 - add CI validation for build, lint, and type safety
-- add exportable polished PDF generation for final reports
+- add alert routing preferences per user or project

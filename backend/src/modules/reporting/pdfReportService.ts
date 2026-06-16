@@ -534,6 +534,9 @@ const buildReportHtml = (run: AnalysisRunView) => {
   const findings = result?.frontend.runtimeFindings ?? [];
   const apiAssertions = result?.frontend.apiAssertions ?? [];
   const tests = result?.testCases ?? [];
+  const rootCauseAnalyses = result?.frontend.rootCauseAnalyses ?? [];
+  const securityFindings = result?.frontend.securityFindings ?? [];
+  const coverageScore = result?.frontend.coverageScore;
   const metrics = calculateMetrics(run);
   const healthScore = calculateHealthScore(metrics);
   const risk = calculateRiskLevel(metrics, healthScore);
@@ -637,6 +640,7 @@ const buildReportHtml = (run: AnalysisRunView) => {
     <div class="cards-grid">
       ${renderMetricCard("Pages discovered", metrics.pagesDiscovered)}
       ${renderMetricCard("Pages tested", metrics.pagesTested)}
+      ${renderMetricCard("Coverage score", coverageScore?.overallScore ?? 0)}
       ${renderMetricCard("Interactions tested", metrics.interactionsTested)}
       ${renderMetricCard("Total findings", metrics.totalFindings)}
       ${renderMetricCard("Critical issues", metrics.criticalIssues)}
@@ -712,7 +716,34 @@ const buildReportHtml = (run: AnalysisRunView) => {
   </section>
 
   <section class="page section">
-    <h2>6. API and Backend Observations</h2>
+    <h2>6. Root Cause Analysis</h2>
+    ${
+      rootCauseAnalyses.length > 0
+        ? rootCauseAnalyses
+            .slice(0, 20)
+            .map(
+              (analysis) => `
+                <article class="finding-card">
+                  <div class="finding-head">
+                    <div>
+                      <p class="eyebrow">${escapeHtml(analysis.findingId)}</p>
+                      <h3>${escapeHtml(analysis.probableRootCause)}</h3>
+                    </div>
+                    <div class="badge-row"><span class="badge">Confidence ${escapeHtml(analysis.confidenceScore)}%</span></div>
+                  </div>
+                  <p><strong>Technical explanation:</strong> ${escapeHtml(analysis.technicalExplanation)}</p>
+                  <p><strong>User impact:</strong> ${escapeHtml(analysis.userImpact)}</p>
+                  <p><strong>Suggested fix:</strong> ${escapeHtml(analysis.suggestedFix)}</p>
+                </article>
+              `,
+            )
+            .join("")
+        : `<p class="empty">No root cause analysis was generated for this run.</p>`
+    }
+  </section>
+
+  <section class="page section">
+    <h2>7. API and Backend Observations</h2>
     ${renderApiObservationRows(apiAssertions)}
     <div class="panel">
       <h3>Backend correlation notes</h3>
@@ -725,27 +756,36 @@ const buildReportHtml = (run: AnalysisRunView) => {
   </section>
 
   <section class="page section">
-    <h2>7. Accessibility Summary</h2>
+    <h2>8. Security Findings</h2>
+    ${
+      securityFindings.length > 0
+        ? `<table><thead><tr><th>Risk</th><th>Category</th><th>Method</th><th>Request</th><th>Remediation</th></tr></thead><tbody>${securityFindings.slice(0, 20).map((finding) => `<tr><td>${escapeHtml(finding.riskLevel)}</td><td>${escapeHtml(finding.category)}</td><td>${escapeHtml(finding.method)}</td><td>${escapeHtml(finding.requestUrl)}</td><td>${escapeHtml(finding.remediation)}</td></tr>`).join("")}</tbody></table>`
+        : `<p class="empty">No API security findings were generated for this run.</p>`
+    }
+  </section>
+
+  <section class="page section">
+    <h2>9. Accessibility Summary</h2>
     ${renderAccessibilitySummary(findings)}
   </section>
 
   <section class="page section">
-    <h2>8. Generated Test Cases</h2>
+    <h2>10. Generated Test Cases</h2>
     ${renderTestCases(tests)}
   </section>
 
   <section class="page section">
-    <h2>9. Regression / Comparison Summary</h2>
+    <h2>11. Regression / Comparison Summary</h2>
     ${renderRegressionSummary()}
   </section>
 
   <section class="page section">
-    <h2>10. Recommendations</h2>
+    <h2>12. Recommendations</h2>
     ${renderRecommendations(recommendations)}
   </section>
 
   <section class="page section">
-    <h2>11. Final Verdict</h2>
+    <h2>13. Final Verdict</h2>
     <div class="summary-box">
       <h3>${escapeHtml(verdict.label)}</h3>
       <p>${escapeHtml(verdict.detail)}</p>

@@ -70,6 +70,16 @@ export type AnalysisResponse = {
       evidence: string[];
       screenshotUrl?: string;
       relatedInteractionId?: string;
+      deviceName?: "Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad";
+      rootCause?: {
+        findingId: string;
+        probableRootCause: string;
+        technicalExplanation: string;
+        userImpact: string;
+        suggestedFix: string;
+        confidenceScore: number;
+        evidence: string[];
+      };
     }>;
     apiAssertions: Array<{
       assertionId: string;
@@ -81,7 +91,59 @@ export type AnalysisResponse = {
       passed: boolean;
       issues: string[];
       responseShape?: string[];
+      deviceName?: "Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad";
     }>;
+    securityFindings: Array<{
+      securityFindingId: string;
+      riskLevel: "low" | "medium" | "high" | "critical";
+      category:
+        | "unauthenticated_sensitive_endpoint"
+        | "missing_authentication_headers"
+        | "unsafe_cors"
+        | "sensitive_data_exposure"
+        | "error_spike"
+        | "missing_rate_limit_signal"
+        | "insecure_http_usage";
+      requestUrl: string;
+      method: string;
+      pageUrl?: string;
+      status?: number;
+      evidence: string[];
+      remediation: string;
+      deviceName?: "Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad";
+    }>;
+    coverageScore: {
+      pagesDiscovered: number;
+      pagesTested: number;
+      formsDetected: number;
+      formsTested: number;
+      buttonsDetected: number;
+      buttonsTested: number;
+      linksDetected: number;
+      linksValidated: number;
+      mobileDevicesTested: Array<"Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad">;
+      apiEndpointsObserved: number;
+      apiEndpointsAnalyzed: number;
+      overallScore: number;
+    };
+    rootCauseAnalyses: Array<{
+      findingId: string;
+      probableRootCause: string;
+      technicalExplanation: string;
+      userImpact: string;
+      suggestedFix: string;
+      confidenceScore: number;
+      evidence: string[];
+    }>;
+    mobileComparison?: {
+      devicesTested: Array<"Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad">;
+      commonIssueIds: string[];
+      deviceOnlyIssues: Array<{
+        deviceName: "Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad";
+        findingIds: string[];
+      }>;
+      summary: string;
+    };
     baseUrl: string;
     pages: Array<{
       url: string;
@@ -89,6 +151,7 @@ export type AnalysisResponse = {
       routePath: string;
       depth: number;
       headings: string[];
+      deviceName?: "Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad";
       buttons: Array<{
         text: string;
         selector: string;
@@ -192,6 +255,8 @@ export type AnalysisSubmission = {
     respectRobotsTxt?: boolean;
     streamHtmlPreview?: boolean;
     crawlProfile?: "auto" | "generic" | "youtube" | "ecommerce" | "dashboard" | "auth-heavy";
+    deviceProfile?: "Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad";
+    mobileDevices?: Array<"Desktop" | "iPhone 15" | "Pixel 7" | "Galaxy S23" | "iPad">;
     strictBehaviorMode?: boolean;
     promptForLogin?: boolean;
     loginPrompt?: {
@@ -226,6 +291,9 @@ export type AppNotification = {
     | "analysis_checkpoint"
     | "analysis_completed"
     | "analysis_failed"
+    | "analysis_critical"
+    | "analysis_regression"
+    | "analysis_security"
     | "analysis_retry"
     | "auth";
   title: string;
@@ -268,6 +336,7 @@ export type AnalysisRun = {
   pages: AnalysisResponse["frontend"]["pages"];
   interactions: AnalysisResponse["frontend"]["interactionResults"];
   failureClusters: AnalysisResponse["frontend"]["failureClusters"];
+  result?: AnalysisResponse;
   progress: {
     stageKey: string;
     stageLabel: string;
@@ -316,7 +385,6 @@ export type AnalysisRun = {
       htmlPreview?: string;
     }>;
   };
-  result?: AnalysisResponse;
   error?: string;
 };
 

@@ -1,5 +1,19 @@
 import mongoose from "mongoose";
 import { env } from "./env";
+import { AnalysisPageModel } from "../models/AnalysisPage";
+
+const ensureIndexes = async () => {
+  try {
+    await AnalysisPageModel.collection.dropIndex("runId_1_url_1");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!message.includes("index not found") && !message.includes("IndexNotFound")) {
+      console.warn("[mongo] Could not drop obsolete AnalysisPage index:", message || error);
+    }
+  }
+
+  await AnalysisPageModel.createIndexes();
+};
 
 export const connectDB = async () => {
   try {
@@ -23,6 +37,7 @@ export const connectDB = async () => {
     });
 
     console.log("✅ MongoDB Connected");
+    await ensureIndexes();
   } catch (error) {
     console.error("❌ DB Error:", error);
     process.exit(1);

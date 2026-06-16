@@ -23,9 +23,14 @@ import {
 } from "./runStore";
 import { publishRunEvent, subscribeToRunEvents } from "./runEvents";
 import { notifyAnalysisRun } from "../notifications/notificationService";
+import { calculateScanCoverageScore } from "../analysis/coverageScore";
+import { analyzeRootCauses } from "../analysis/rootCause";
+import { analyzeApiSecurity } from "../analysis/securityAnalysis";
+import { buildMobileComparison } from "../analysis/mobileComparison";
 import { env } from "../../config/env";
 import type {
   AnalysisRequest,
+  ApiSecurityFinding,
   AnalysisRunView,
   FailureCluster,
   FrontendAnalysis,
@@ -36,6 +41,8 @@ import type {
   PlatformAnalysisResult,
   ProgressUpdate,
   RunLogEntry,
+  RuntimeFinding,
+  MobileDeviceProfile,
 } from "../../types/platform";
 
 const WORKER_ID = `worker-${randomUUID()}`;
@@ -216,6 +223,123 @@ const createQueuedRun = async ({
       : `A new analysis run has been queued for ${request.targetUrl}.`,
   );
   return run;
+};
+
+const supportedDeviceProfiles: MobileDeviceProfile[] = ["Desktop", "iPhone 15", "Pixel 7", "Galaxy S23", "iPad"];
+
+const getRequestedDevices = (request: AnalysisRequest): MobileDeviceProfile[] => {
+  const requested = request.options?.mobileDevices?.length
+    ? request.options.mobileDevices
+    : [request.options?.deviceProfile ?? "Desktop"];
+  const unique = Array.from(new Set(requested.filter((device) => supportedDeviceProfiles.includes(device))));
+  return unique.length > 0 ? unique : ["Desktop"];
+};
+
+const mergeCoverageReports = (analyses: FrontendAnalysis[]): FrontendAnalysis["coverageReport"] => {
+  const total = analyses.reduce(
+    (summary, analysis) => ({
+      total_buttons: summary.total_buttons + analysis.coverageReport.total_buttons,
+      tested: summary.tested + analysis.coverageReport.tested,
+      passed: summary.passed + analysis.coverageReport.passed,
+      failed: summary.failed + analysis.coverageReport.failed,
+    }),
+    { total_buttons: 0, tested: 0, passed: 0, failed: 0 },
+  );
+
+  return {
+    ...total,
+    coverage: total.total_buttons === 0 ? "0%" : `${Math.round((total.tested / total.total_buttons) * 100)}%`,
+  };
+};
+
+const mergeDeviceAnalyses = (analyses: FrontendAnalysis[]): FrontendAnalysis => {
+  const [first] = analyses;
+  if (!first) {
+    throw new Error("No frontend analysis result was produced");
+  }
+
+  return {
+    ...first,
+    pages: analyses.flatMap((analysis) => analysis.pages),
+    interactiveElements: analyses.flatMap((analysis) => analysis.interactiveElements),
+    interactionResults: analyses.flatMap((analysis) => analysis.interactionResults),
+    navigationGraph: analyses.flatMap((analysis) => analysis.navigationGraph),
+    networkRequests: analyses.flatMap((analysis) => analysis.networkRequests),
+    coverageReport: mergeCoverageReports(analyses),
+    failureClusters: analyses.flatMap((analysis) => analysis.failureClusters),
+    runtimeFindings: analyses.flatMap((analysis) => analysis.runtimeFindings),
+    scenarioResults: analyses.flatMap((analysis) => analysis.scenarioResults),
+    apiAssertions: analyses.flatMap((analysis) => analysis.apiAssertions),
+    securityFindings: [],
+    coverageScore: first.coverageScore,
+    rootCauseAnalyses: [],
+    mobileComparison: undefined,
+    warnings: analyses.flatMap((analysis) => analysis.warnings),
+  };
+};
+
+const securityFindingToRuntimeFinding = (
+  finding: ApiSecurityFinding,
+  index: number,
+  fallbackPageUrl: string,
+): RuntimeFinding => ({
+  findingId: `security_${index + 1}_${finding.securityFindingId}`,
+  type: "api_security",
+  severity:
+    finding.riskLevel === "critical" || finding.riskLevel === "high"
+      ? "high"
+      : finding.riskLevel === "medium"
+        ? "medium"
+        : "low",
+  pageUrl: finding.pageUrl ?? fallbackPageUrl,
+  summary: `API security: ${finding.category.replace(/_/g, " ")}`,
+  details: `${finding.method} ${finding.requestUrl}. ${finding.remediation}`,
+  evidence: finding.evidence,
+  deviceName: finding.deviceName,
+});
+
+const enrichFrontendAnalysis = (frontend: FrontendAnalysis): FrontendAnalysis => {
+  const securityFindings = analyzeApiSecurity(frontend.networkRequests);
+  const securityRuntimeFindings = securityFindings.map((finding, index) =>
+    securityFindingToRuntimeFinding(finding, index, frontend.baseUrl),
+  );
+  const withSecurity: FrontendAnalysis = {
+    ...frontend,
+    securityFindings,
+    runtimeFindings: [...frontend.runtimeFindings, ...securityRuntimeFindings],
+  };
+  const rootCauseAnalyses = analyzeRootCauses(withSecurity);
+  const rootCauseByFindingId = new Map(rootCauseAnalyses.map((analysis) => [analysis.findingId, analysis]));
+  const withRootCauses: FrontendAnalysis = {
+    ...withSecurity,
+    rootCauseAnalyses,
+    runtimeFindings: withSecurity.runtimeFindings.map((finding) => ({
+      ...finding,
+      rootCause: rootCauseByFindingId.get(finding.findingId),
+    })),
+  };
+
+  const coverageScore = calculateScanCoverageScore(withRootCauses);
+  return {
+    ...withRootCauses,
+    coverageScore,
+    mobileComparison: buildMobileComparison(withRootCauses),
+  };
+};
+
+const hasNewRegressionSignals = (originalRun: AnalysisRunView | null, frontend: FrontendAnalysis) => {
+  if (!originalRun?.result?.frontend.runtimeFindings.length) {
+    return false;
+  }
+
+  const previous = new Set(
+    originalRun.result.frontend.runtimeFindings.map(
+      (finding) => `${finding.type}:${finding.severity}:${finding.pageUrl}:${finding.summary}`,
+    ),
+  );
+  return frontend.runtimeFindings.some(
+    (finding) => !previous.has(`${finding.type}:${finding.severity}:${finding.pageUrl}:${finding.summary}`),
+  );
 };
 
 export const startPlatformAnalysis = async (
@@ -595,206 +719,228 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
         ? await getAnalysisRun(request.options.resumeFrom.previousRunId)
         : null;
 
-    const frontend = await crawlFrontend(request, runId, {
-      onProgress: async (progress) => {
-        const buffer = ensureRunBuffer(run);
-        const dynamicExpectedDuration = deriveExpectedDuration({
-          request,
-          progress,
-          startedAt: run.startedAt,
-          fallback: expectedDurationSeconds ?? estimateDuration(request),
-        });
-        const nextProgress = {
-          ...progress,
-          expectedDurationSeconds: dynamicExpectedDuration,
-        };
-        buffer.snapshot.status = "running";
-        buffer.snapshot.expectedDurationSeconds = dynamicExpectedDuration;
-        buffer.snapshot.progress = nextProgress;
-        buffer.pendingProgress = nextProgress;
-        publishBufferedSnapshot(runId);
-        scheduleRunBufferFlush(runId);
-      },
-      onPage: async (page) => {
-        const buffer = ensureRunBuffer(run);
-        buffer.pendingPages.set(page.url, page);
-        buffer.snapshot.pages = [
-          ...buffer.snapshot.pages.filter((item) => item.url !== page.url),
-          page,
-        ];
-        buffer.snapshot.progress.pagesDiscovered = Math.max(
-          buffer.snapshot.progress.pagesDiscovered ?? 0,
-          buffer.snapshot.pages.length,
-        );
-        publishBufferedSnapshot(runId);
-        scheduleRunBufferFlush(runId);
-        if (page.previewImageUrl) {
-          await persistAnalysisArtifact({
-            runId,
-            request,
-            kind: "preview",
-            publicUrl: page.previewImageUrl,
-            relatedPageUrl: page.url,
+    const requestedDevices = getRequestedDevices(request);
+    const frontendAnalyses: FrontendAnalysis[] = [];
+
+    for (const deviceName of requestedDevices) {
+      if (requestedDevices.length > 1) {
+        await logRun(runId, "mobile", `starting device profile ${deviceName}`);
+      }
+
+      const deviceRequest: AnalysisRequest = {
+        ...request,
+        options: {
+          ...request.options,
+          deviceProfile: deviceName,
+        },
+      };
+
+      const deviceFrontend = await crawlFrontend(deviceRequest, runId, {
+        onProgress: async (progress) => {
+          const buffer = ensureRunBuffer(run);
+          const dynamicExpectedDuration = deriveExpectedDuration({
+            request: deviceRequest,
+            progress,
+            startedAt: run.startedAt,
+            fallback: expectedDurationSeconds ?? estimateDuration(deviceRequest),
           });
-        }
-        await logRun(runId, "crawl", `page ${page.routePath} stored`);
-      },
-      onInteraction: async (interaction) => {
-        const buffer = ensureRunBuffer(run);
-        buffer.pendingInteractions.set(interaction.buttonId, interaction);
-        buffer.snapshot.interactions = [
-          ...buffer.snapshot.interactions.filter((item) => item.buttonId !== interaction.buttonId),
-          interaction,
-        ];
-        buffer.snapshot.progress.interactionsTested = Math.max(
-          buffer.snapshot.progress.interactionsTested ?? 0,
-          buffer.snapshot.interactions.length,
-        );
-        publishBufferedSnapshot(runId);
-        if (buffer.pendingInteractions.size >= env.analysis.interactionBatchSize) {
-          await flushRunBuffer(runId, { force: true });
-        } else {
+          const nextProgress = {
+            ...progress,
+            expectedDurationSeconds: dynamicExpectedDuration,
+          };
+          buffer.snapshot.status = "running";
+          buffer.snapshot.expectedDurationSeconds = dynamicExpectedDuration;
+          buffer.snapshot.progress = nextProgress;
+          buffer.pendingProgress = nextProgress;
+          publishBufferedSnapshot(runId);
           scheduleRunBufferFlush(runId);
-        }
-        if (interaction.screenshotUrl) {
-          await persistAnalysisArtifact({
-            runId,
-            request,
-            kind: "interaction_failure",
-            publicUrl: interaction.screenshotUrl,
-            relatedPageUrl: interaction.pageUrl,
-            relatedInteractionId: interaction.buttonId,
-            absolutePath: interaction.screenshotPath,
-          });
-        }
-        if (interaction.beforeScreenshotUrl) {
-          await persistAnalysisArtifact({
-            runId,
-            request,
-            kind: "interaction_before",
-            publicUrl: interaction.beforeScreenshotUrl,
-            relatedPageUrl: interaction.pageUrl,
-            relatedInteractionId: interaction.buttonId,
-          });
-        }
-        if (interaction.afterScreenshotUrl) {
-          await persistAnalysisArtifact({
-            runId,
-            request,
-            kind: "interaction_after",
-            publicUrl: interaction.afterScreenshotUrl,
-            relatedPageUrl: interaction.pageUrl,
-            relatedInteractionId: interaction.buttonId,
-          });
-        }
-      },
-      onFailureClusters: async (failureClusters) => {
-        const buffer = ensureRunBuffer(run);
-        buffer.pendingFailureClusters = failureClusters;
-        buffer.snapshot.failureClusters = failureClusters;
-        publishBufferedSnapshot(runId);
-        scheduleRunBufferFlush(runId);
-      },
-      waitForCheckpoint: async (checkpoint) => {
-        const buffer = ensureRunBuffer(run);
-        const nextProgress = {
-          stageKey: "awaiting-checkpoint",
-          stageLabel: "Awaiting checkpoint",
-          summary: checkpoint.label,
-          technical: checkpoint.instructions,
-          currentPageUrl: checkpoint.currentPageUrl,
-          expectedDurationSeconds,
-          checkpoint: {
-            kind: checkpoint.kind,
-            label: checkpoint.label,
-            instructions: checkpoint.instructions,
-            expiresAt: checkpoint.expiresAt,
-            loginUrl: checkpoint.loginUrl,
-            allowedActions: checkpoint.allowedActions,
-            autoContinueWithoutLogin: checkpoint.autoContinueWithoutLogin,
-          },
-          liveSession: checkpoint.liveSession,
-        };
-        buffer.snapshot.status = "awaiting_checkpoint";
-        buffer.snapshot.progress = nextProgress;
-        buffer.pendingProgress = nextProgress;
-        publishBufferedSnapshot(runId);
-        await flushRunBuffer(runId, { force: true });
-        await setAnalysisRunAwaitingCheckpoint({
-          runId,
-          expectedDurationSeconds,
-          workerId: WORKER_ID,
-          progress: nextProgress,
-        });
-        await logRun(runId, "auth", checkpoint.instructions);
-        void notifyAnalysisRun(
-          {
-            ...buffer.snapshot,
-            status: "awaiting_checkpoint",
-            progress: nextProgress,
-          },
-          "analysis_checkpoint",
-          "SK CrawlPulse needs your input",
-          `The analysis for ${request.targetUrl} is waiting at a checkpoint: ${checkpoint.label}.`,
-        );
-
-        let timedOut = false;
-        let timeout: NodeJS.Timeout | undefined;
-        const fallbackAction = getCheckpointFallbackAction(checkpoint);
-        const timeoutMs = getCheckpointTimeoutMs(checkpoint.expiresAt);
-
-        const action = await new Promise<LoginPromptAction>((resolve, reject) => {
-          let settled = false;
-          const finish = (nextAction: LoginPromptAction) => {
-            if (settled) {
-              return;
-            }
-            settled = true;
-            if (timeout) {
-              clearTimeout(timeout);
-            }
-            resolve(nextAction);
-          };
-          const fail = (error: Error) => {
-            if (settled) {
-              return;
-            }
-            settled = true;
-            if (timeout) {
-              clearTimeout(timeout);
-            }
-            reject(error);
-          };
-
-          checkpointWaiters.set(runId, { resolve: finish, reject: fail });
-
-          if (fallbackAction && timeoutMs !== null) {
-            timeout = setTimeout(() => {
-              timedOut = true;
-              checkpointWaiters.delete(runId);
-              finish(fallbackAction);
-            }, timeoutMs);
+        },
+        onPage: async (page) => {
+          const buffer = ensureRunBuffer(run);
+          const pageKey = `${page.deviceName ?? "Desktop"}:${page.url}`;
+          buffer.pendingPages.set(pageKey, page);
+          buffer.snapshot.pages = [
+            ...buffer.snapshot.pages.filter((item) => `${item.deviceName ?? "Desktop"}:${item.url}` !== pageKey),
+            page,
+          ];
+          buffer.snapshot.progress.pagesDiscovered = Math.max(
+            buffer.snapshot.progress.pagesDiscovered ?? 0,
+            buffer.snapshot.pages.length,
+          );
+          publishBufferedSnapshot(runId);
+          scheduleRunBufferFlush(runId);
+          if (page.previewImageUrl) {
+            await persistAnalysisArtifact({
+              runId,
+              request,
+              kind: "preview",
+              publicUrl: page.previewImageUrl,
+              relatedPageUrl: page.url,
+            });
           }
-        });
+          await logRun(runId, "crawl", `page ${page.routePath} stored`);
+        },
+        onInteraction: async (interaction) => {
+          const buffer = ensureRunBuffer(run);
+          buffer.pendingInteractions.set(interaction.buttonId, interaction);
+          buffer.snapshot.interactions = [
+            ...buffer.snapshot.interactions.filter((item) => item.buttonId !== interaction.buttonId),
+            interaction,
+          ];
+          buffer.snapshot.progress.interactionsTested = Math.max(
+            buffer.snapshot.progress.interactionsTested ?? 0,
+            buffer.snapshot.interactions.length,
+          );
+          publishBufferedSnapshot(runId);
+          if (buffer.pendingInteractions.size >= env.analysis.interactionBatchSize) {
+            await flushRunBuffer(runId, { force: true });
+          } else {
+            scheduleRunBufferFlush(runId);
+          }
+          if (interaction.screenshotUrl) {
+            await persistAnalysisArtifact({
+              runId,
+              request,
+              kind: "interaction_failure",
+              publicUrl: interaction.screenshotUrl,
+              relatedPageUrl: interaction.pageUrl,
+              relatedInteractionId: interaction.buttonId,
+              absolutePath: interaction.screenshotPath,
+            });
+          }
+          if (interaction.beforeScreenshotUrl) {
+            await persistAnalysisArtifact({
+              runId,
+              request,
+              kind: "interaction_before",
+              publicUrl: interaction.beforeScreenshotUrl,
+              relatedPageUrl: interaction.pageUrl,
+              relatedInteractionId: interaction.buttonId,
+            });
+          }
+          if (interaction.afterScreenshotUrl) {
+            await persistAnalysisArtifact({
+              runId,
+              request,
+              kind: "interaction_after",
+              publicUrl: interaction.afterScreenshotUrl,
+              relatedPageUrl: interaction.pageUrl,
+              relatedInteractionId: interaction.buttonId,
+            });
+          }
+        },
+        onFailureClusters: async (failureClusters) => {
+          const buffer = ensureRunBuffer(run);
+          buffer.pendingFailureClusters = failureClusters;
+          buffer.snapshot.failureClusters = failureClusters;
+          publishBufferedSnapshot(runId);
+          scheduleRunBufferFlush(runId);
+        },
+        waitForCheckpoint: async (checkpoint) => {
+          const buffer = ensureRunBuffer(run);
+          const nextProgress = {
+            stageKey: "awaiting-checkpoint",
+            stageLabel: "Awaiting checkpoint",
+            summary: checkpoint.label,
+            technical: checkpoint.instructions,
+            currentPageUrl: checkpoint.currentPageUrl,
+            expectedDurationSeconds,
+            checkpoint: {
+              kind: checkpoint.kind,
+              label: checkpoint.label,
+              instructions: checkpoint.instructions,
+              expiresAt: checkpoint.expiresAt,
+              loginUrl: checkpoint.loginUrl,
+              allowedActions: checkpoint.allowedActions,
+              autoContinueWithoutLogin: checkpoint.autoContinueWithoutLogin,
+            },
+            liveSession: checkpoint.liveSession,
+          };
+          buffer.snapshot.status = "awaiting_checkpoint";
+          buffer.snapshot.progress = nextProgress;
+          buffer.pendingProgress = nextProgress;
+          publishBufferedSnapshot(runId);
+          await flushRunBuffer(runId, { force: true });
+          await setAnalysisRunAwaitingCheckpoint({
+            runId,
+            expectedDurationSeconds,
+            workerId: WORKER_ID,
+            progress: nextProgress,
+          });
+          await logRun(runId, "auth", checkpoint.instructions);
+          void notifyAnalysisRun(
+            {
+              ...buffer.snapshot,
+              status: "awaiting_checkpoint",
+              progress: nextProgress,
+            },
+            "analysis_checkpoint",
+            "SK CrawlPulse needs your input",
+            `The analysis for ${request.targetUrl} is waiting at a checkpoint: ${checkpoint.label}.`,
+          );
 
-        if (timedOut) {
-          await logRun(runId, "auth", `checkpoint timed out; auto-resuming with action: ${action}`, "warn");
-        }
-        await logRun(runId, "auth", `checkpoint resumed with action: ${action}`);
-        return action;
-      },
-      onWarning: async (message) => {
-        await logRun(runId, "crawler", message, "warn");
-      },
-    });
+          let timedOut = false;
+          let timeout: NodeJS.Timeout | undefined;
+          const fallbackAction = getCheckpointFallbackAction(checkpoint);
+          const timeoutMs = getCheckpointTimeoutMs(checkpoint.expiresAt);
 
-    const mergedFrontend = originalRun
+          const action = await new Promise<LoginPromptAction>((resolve, reject) => {
+            let settled = false;
+            const finish = (nextAction: LoginPromptAction) => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              if (timeout) {
+                clearTimeout(timeout);
+              }
+              resolve(nextAction);
+            };
+            const fail = (error: Error) => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              if (timeout) {
+                clearTimeout(timeout);
+              }
+              reject(error);
+            };
+
+            checkpointWaiters.set(runId, { resolve: finish, reject: fail });
+
+            if (fallbackAction && timeoutMs !== null) {
+              timeout = setTimeout(() => {
+                timedOut = true;
+                checkpointWaiters.delete(runId);
+                finish(fallbackAction);
+              }, timeoutMs);
+            }
+          });
+
+          if (timedOut) {
+            await logRun(runId, "auth", `checkpoint timed out; auto-resuming with action: ${action}`, "warn");
+          }
+          await logRun(runId, "auth", `checkpoint resumed with action: ${action}`);
+          return action;
+        },
+        onWarning: async (message) => {
+          await logRun(runId, "crawler", message, "warn");
+        },
+      });
+
+      frontendAnalyses.push(deviceFrontend);
+    }
+
+    const frontend = mergeDeviceAnalyses(frontendAnalyses);
+    const resumedFrontend = originalRun
       ? mergeResumedFrontend({
           originalRun,
           resumedFrontend: frontend,
         })
       : frontend;
 
+    const mergedFrontend = enrichFrontendAnalysis(resumedFrontend);
     const testCases = generateTestCases(mergedFrontend);
     const backendValidation = validateBackendInput(request, mergedFrontend);
     const report = buildReport({
@@ -811,6 +957,10 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
       testCases,
       backendValidation,
       report,
+      rootCauseAnalyses: mergedFrontend.rootCauseAnalyses,
+      securityFindings: mergedFrontend.securityFindings,
+      coverageScore: mergedFrontend.coverageScore,
+      mobileComparison: mergedFrontend.mobileComparison,
     };
 
     for (const scenario of mergedFrontend.scenarioResults) {
@@ -843,22 +993,15 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
     }
 
     const buffer = ensureRunBuffer(run);
-    buffer.pendingProgress = {
-      ...buffer.snapshot.progress,
-      expectedDurationSeconds: mergedFrontend.pages.length > 0 ? Math.max(elapsedToSeconds(run.startedAt), expectedDurationSeconds ?? 0) : expectedDurationSeconds,
-      pagesDiscovered: mergedFrontend.pages.length,
-      completedPages: mergedFrontend.pages.length,
-      interactionsDetected: mergedFrontend.interactiveElements.length,
-      interactionsTested: mergedFrontend.interactionResults.length,
-    };
-    await flushRunBuffer(runId, { force: true });
-
     const completedProgress = {
       stageKey: "completed",
       stageLabel: "Completed",
       summary: "Analysis finished",
       technical: "All crawl, interaction, and report steps completed successfully.",
-      expectedDurationSeconds: mergedFrontend.pages.length > 0 ? Math.max(elapsedToSeconds(run.startedAt), expectedDurationSeconds ?? 0) : expectedDurationSeconds,
+      expectedDurationSeconds:
+        mergedFrontend.pages.length > 0
+          ? Math.max(elapsedToSeconds(run.startedAt), expectedDurationSeconds ?? 0)
+          : expectedDurationSeconds,
       pagesDiscovered: mergedFrontend.pages.length,
       completedPages: mergedFrontend.pages.length,
       interactionsDetected: mergedFrontend.interactiveElements.length,
@@ -899,6 +1042,19 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
         : undefined,
     };
 
+    buffer.pendingProgress = {
+      ...buffer.snapshot.progress,
+      expectedDurationSeconds:
+        mergedFrontend.pages.length > 0
+          ? Math.max(elapsedToSeconds(run.startedAt), expectedDurationSeconds ?? 0)
+          : expectedDurationSeconds,
+      pagesDiscovered: mergedFrontend.pages.length,
+      completedPages: mergedFrontend.pages.length,
+      interactionsDetected: mergedFrontend.interactiveElements.length,
+      interactionsTested: mergedFrontend.interactionResults.length,
+    };
+    await flushRunBuffer(runId, { force: true });
+
     await completeAnalysisRun({
       runId,
       result,
@@ -917,6 +1073,51 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
       "SK CrawlPulse analysis completed",
       `The analysis for ${request.targetUrl} completed with ${mergedFrontend.failureClusters.length} failure cluster${mergedFrontend.failureClusters.length === 1 ? "" : "s"} and ${mergedFrontend.runtimeFindings.length} finding${mergedFrontend.runtimeFindings.length === 1 ? "" : "s"}.`,
     );
+    const criticalFindings = mergedFrontend.runtimeFindings.filter((finding) => finding.severity === "high");
+    if (criticalFindings.length > 0) {
+      void notifyAnalysisRun(
+        {
+          ...buffer.snapshot,
+          result,
+          status: "completed",
+          progress: completedProgress,
+        },
+        "analysis_critical",
+        "SK CrawlPulse critical findings detected",
+        `${criticalFindings.length} high-severity finding${criticalFindings.length === 1 ? "" : "s"} were detected for ${request.targetUrl}.`,
+      );
+    }
+
+    const criticalSecurity = mergedFrontend.securityFindings.filter(
+      (finding) => finding.riskLevel === "critical" || finding.riskLevel === "high",
+    );
+    if (criticalSecurity.length > 0) {
+      void notifyAnalysisRun(
+        {
+          ...buffer.snapshot,
+          result,
+          status: "completed",
+          progress: completedProgress,
+        },
+        "analysis_security",
+        "SK CrawlPulse API security findings detected",
+        `${criticalSecurity.length} high-risk API security signal${criticalSecurity.length === 1 ? "" : "s"} were detected for ${request.targetUrl}.`,
+      );
+    }
+
+    if (hasNewRegressionSignals(originalRun, mergedFrontend)) {
+      void notifyAnalysisRun(
+        {
+          ...buffer.snapshot,
+          result,
+          status: "completed",
+          progress: completedProgress,
+        },
+        "analysis_regression",
+        "SK CrawlPulse regression signals detected",
+        `This retry introduced new finding signatures compared with ${originalRun?.runId}.`,
+      );
+    }
     await logRun(runId, "queue", "completed");
   } catch (error) {
     if (error instanceof DedicatedLoginSessionError) {

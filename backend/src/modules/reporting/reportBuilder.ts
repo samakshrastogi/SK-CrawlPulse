@@ -56,6 +56,9 @@ export const buildReport = ({
       `Runtime findings: ${frontend.runtimeFindings.length}`,
       `Failure clusters: ${frontend.failureClusters.length}`,
       `API assertions: ${frontend.apiAssertions.length}`,
+      `API security findings: ${frontend.securityFindings.length}`,
+      `Coverage score: ${frontend.coverageScore.overallScore}/100`,
+      `Devices tested: ${frontend.coverageScore.mobileDevicesTested.join(", ") || "none"}`,
       `Strict behavior evidence lines: ${strictBehaviorLines.length}`,
       `Backend validation provided: ${backendValidation.provided ? "yes" : "no"}`,
     ],
@@ -68,6 +71,12 @@ export const buildReport = ({
         : "No first-class runtime or accessibility findings were detected in this pass.",
     details: [
       ...frontend.runtimeFindings.slice(0, 24).map((finding) => `${finding.type}: ${finding.summary} (${finding.pageUrl})`),
+      ...frontend.rootCauseAnalyses.slice(0, 12).map(
+        (analysis) => `Root cause ${analysis.findingId}: ${analysis.probableRootCause}; fix: ${analysis.suggestedFix}; confidence ${analysis.confidenceScore}/100`,
+      ),
+      ...frontend.securityFindings.slice(0, 12).map(
+        (finding) => `API security ${finding.riskLevel}: ${finding.category} on ${finding.method} ${finding.requestUrl}; ${finding.remediation}`,
+      ),
       ...frontend.failureClusters.map(
         (cluster) => `${cluster.title}: ${cluster.summary} (${cluster.occurrences} occurrence${cluster.occurrences === 1 ? "" : "s"})`,
       ),
@@ -77,13 +86,21 @@ export const buildReport = ({
     ],
   },
   performance: {
-    title: "Performance and API assertions",
-    summary: "Live API assertions flagged slow, failing, or structurally unclear responses.",
-    details: frontend.apiAssertions
+    title: "Performance, API assertions, and coverage",
+    summary: `Live API assertions and scan coverage were evaluated. Overall coverage score: ${frontend.coverageScore.overallScore}/100.`,
+    details: [
+      `Pages tested: ${frontend.coverageScore.pagesTested}/${frontend.coverageScore.pagesDiscovered}`,
+      `Forms tested: ${frontend.coverageScore.formsTested}/${frontend.coverageScore.formsDetected}`,
+      `Buttons tested: ${frontend.coverageScore.buttonsTested}/${frontend.coverageScore.buttonsDetected}`,
+      `Links validated: ${frontend.coverageScore.linksValidated}/${frontend.coverageScore.linksDetected}`,
+      `API endpoints analyzed: ${frontend.coverageScore.apiEndpointsAnalyzed}/${frontend.coverageScore.apiEndpointsObserved}`,
+      frontend.mobileComparison?.summary,
+      ...frontend.apiAssertions
       .slice(0, 20)
       .map((assertion) =>
         `${assertion.method} ${assertion.url} [${assertion.status ?? "n/a"}] ${assertion.passed ? "PASS" : assertion.issues.join(", ")}`,
       ),
+    ].filter((item): item is string => Boolean(item)),
   },
   mermaidFlowchart: buildFlowchart(frontend),
   pdfOutline: [

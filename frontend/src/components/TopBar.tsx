@@ -24,7 +24,7 @@ export function TopBar({
   const visibleNotifications = notifications.slice(0, 8);
 
   return (
-    <header className="app-navbar-shell premium-header glass-surface glass-hover hidden rounded-[1.5rem] px-4 py-3 md:block fade-in-up">
+    <header className="app-navbar-shell premium-header glass-surface glass-hover hidden overflow-visible rounded-[1.5rem] px-4 py-3 md:block fade-in-up">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <div className="brand-mark flex h-9 w-9 shrink-0 items-center justify-center rounded-[1.15rem] text-sm font-semibold text-white">
@@ -55,7 +55,7 @@ export function TopBar({
             </button>
 
             {notificationsOpen ? (
-              <div className="absolute right-0 top-11 z-50 w-[360px] overflow-hidden rounded-[1.1rem] border border-white/10 bg-slate-950/96 shadow-[0_24px_70px_rgba(2,6,23,0.5)] backdrop-blur-xl">
+              <div className="absolute right-0 top-11 z-[90] w-[380px] overflow-visible rounded-[1.1rem] border border-white/10 bg-slate-950/96 shadow-[0_24px_70px_rgba(2,6,23,0.5)] backdrop-blur-xl">
                 <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.18em] text-cyan-300">Notifications</p>
@@ -85,7 +85,7 @@ export function TopBar({
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm font-semibold">{notification.title}</p>
+                          <p className="text-sm font-semibold leading-5">{notification.title}</p>
                           <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${notification.readAt ? "bg-slate-600" : "bg-cyan-300"}`} />
                         </div>
                         <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-400">{notification.message}</p>

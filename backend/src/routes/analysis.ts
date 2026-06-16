@@ -15,6 +15,7 @@ import {
   buildRunJsonExport,
 } from "../modules/reporting/exportBuilder";
 import { generateProfessionalPdfReport } from "../modules/reporting/pdfReportService";
+import { answerRunQuestion } from "../modules/chat/chatAssistant";
 import type { AnalysisRequest, LoginPromptAction } from "../types/platform";
 
 export const analysisRouter = Router();
@@ -87,6 +88,19 @@ analysisRouter.get("/runs/:runId", async (req, res, next) => {
     }
 
     res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+analysisRouter.post("/runs/:runId/chat", async (req, res, next) => {
+  try {
+    const run = await getPlatformAnalysisRun(req.params.runId);
+    if (!run) {
+      throw new HttpError(404, "run not found");
+    }
+
+    res.status(200).json(answerRunQuestion(run, req.body?.question));
   } catch (error) {
     next(error);
   }

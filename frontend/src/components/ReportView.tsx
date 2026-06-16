@@ -46,9 +46,26 @@ const EMPTY_RESULT: AnalysisResponse = {
     failureClusters: [],
     runtimeFindings: [],
     apiAssertions: [],
+    securityFindings: [],
+    coverageScore: {
+      pagesDiscovered: 0,
+      pagesTested: 0,
+      formsDetected: 0,
+      formsTested: 0,
+      buttonsDetected: 0,
+      buttonsTested: 0,
+      linksDetected: 0,
+      linksValidated: 0,
+      mobileDevicesTested: [],
+      apiEndpointsObserved: 0,
+      apiEndpointsAnalyzed: 0,
+      overallScore: 0,
+    },
+    rootCauseAnalyses: [],
     baseUrl: "",
     pages: [],
     warnings: [],
+    mobileComparison: undefined,
   },
   testCases: [],
   backendValidation: {
@@ -119,6 +136,7 @@ export function ReportView({ result, currentRun, filters }: ReportViewProps) {
   const backendObservations = result.backendValidation.observations;
   const mismatchedEndpoints = result.backendValidation.mismatchedEndpoints ?? [];
   const coverage = result.frontend.coverageReport;
+  const coverageScore = result.frontend.coverageScore;
   const topRiskRoute = routeRisks[0];
   const dominantType = getTopLabel(findings.map((finding) => finding.type));
   const confidence = deriveConfidence(result);
@@ -201,18 +219,20 @@ export function ReportView({ result, currentRun, filters }: ReportViewProps) {
           </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-4">
-          <ReportStat label="Quality gate" value={qualityGate.label} />
-          <ReportStat label="Confidence" value={confidence.level} />
-          <ReportStat
-            label="Highest-risk route"
-            value={topRiskRoute?.route ?? "--"}
-          />
-          <ReportStat
-            label="Dominant issue type"
-            value={dominantType?.label ?? "--"}
-          />
-        </div>
+      <div className="grid gap-3 lg:grid-cols-4">
+        <ReportStat label="Quality gate" value={qualityGate.label} />
+        <ReportStat label="Confidence" value={confidence.level} />
+        <ReportStat
+          label="Highest-risk route"
+          value={topRiskRoute?.route ?? "--"}
+        />
+        <ReportStat
+          label="Dominant issue type"
+          value={dominantType?.label ?? "--"}
+        />
+        <ReportStat label="Coverage score" value={`${coverageScore.overallScore}/100`} />
+        <ReportStat label="Devices tested" value={coverageScore.mobileDevicesTested.join(", ") || "--"} />
+      </div>
 
         <article className="min-w-0 rounded-2xl border border-cyan-300/14 bg-[linear-gradient(135deg,rgba(8,47,73,0.5)_0%,rgba(15,23,42,0.9)_100%)] p-4 fade-in-up">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -267,6 +287,10 @@ export function ReportView({ result, currentRun, filters }: ReportViewProps) {
                 <InsightCard
                   title="Immediate focus"
                   text={recommendations[0] ?? "No urgent next action was inferred from the current report slice."}
+                />
+                <InsightCard
+                  title="Security posture"
+                  text={result.frontend.securityFindings.length > 0 ? `${result.frontend.securityFindings.length} API security finding${result.frontend.securityFindings.length === 1 ? "" : "s"} were detected.` : "No API security signals were generated from the current crawl."}
                 />
               </div>
               <DetailList title={`Quality gate: ${qualityGate.label}`} items={qualityGate.reasons} />
@@ -523,6 +547,33 @@ export function ReportView({ result, currentRun, filters }: ReportViewProps) {
                   </div>
                 )}
               </div>
+            </article>
+
+            <article className="min-w-0 grid gap-3 rounded-2xl border border-white/10 bg-slate-950/70 p-4 fade-in-up xl:col-span-2">
+              <SectionHeader
+                eyebrow="Coverage and device drift"
+                title="How much of the surface was exercised"
+              />
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <CompactMetric label="Pages" value={`${coverageScore.pagesTested}/${coverageScore.pagesDiscovered}`} />
+                <CompactMetric label="Forms" value={`${coverageScore.formsTested}/${coverageScore.formsDetected}`} />
+                <CompactMetric label="Buttons" value={`${coverageScore.buttonsTested}/${coverageScore.buttonsDetected}`} />
+                <CompactMetric label="Links" value={`${coverageScore.linksValidated}/${coverageScore.linksDetected}`} />
+              </div>
+              <DetailList
+                title="Device comparison"
+                items={
+                  result.frontend.mobileComparison
+                    ? [
+                        result.frontend.mobileComparison.summary,
+                        `Common issues: ${result.frontend.mobileComparison.commonIssueIds.length}`,
+                        ...result.frontend.mobileComparison.deviceOnlyIssues.map(
+                          (item) => `${item.deviceName}: ${item.findingIds.length} device-specific issue${item.findingIds.length === 1 ? "" : "s"}`,
+                        ),
+                      ]
+                    : ["No mobile comparison was produced for this run."]
+                }
+              />
             </article>
           </div>
         ) : null}

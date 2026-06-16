@@ -18,6 +18,7 @@ import type {
   FrontendAnalysis,
   InteractionResult,
   LiveSessionSnapshot,
+  MobileDeviceProfile,
   NavigationEdge,
   NetworkObservation,
   PageAnalysis,
@@ -252,6 +253,47 @@ const launchBrowser = async (headless: boolean) => {
 
   throw lastError instanceof Error ? lastError : new Error("Unable to launch Chromium");
 };
+
+const mobileDeviceProfiles: Record<MobileDeviceProfile, BrowserContextOptions> = {
+  Desktop: {},
+  "iPhone 15": {
+    viewport: { width: 393, height: 852 },
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+  },
+  "Pixel 7": {
+    viewport: { width: 412, height: 915 },
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+    deviceScaleFactor: 2.625,
+    isMobile: true,
+    hasTouch: true,
+  },
+  "Galaxy S23": {
+    viewport: { width: 360, height: 780 },
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+  },
+  iPad: {
+    viewport: { width: 820, height: 1180 },
+    userAgent:
+      "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  },
+};
+
+const resolveDeviceProfile = (request: AnalysisRequest): MobileDeviceProfile =>
+  request.options?.deviceProfile && request.options.deviceProfile in mobileDeviceProfiles
+    ? request.options.deviceProfile
+    : "Desktop";
 
 const getPageSignature = async (page: Page) =>
   withNavigationRetry(
@@ -576,6 +618,7 @@ const attachNetworkTracking = (
   context: BrowserContext,
   observations: NetworkObservation[],
   baseUrl: URL,
+  deviceName: MobileDeviceProfile,
 ) => {
   const started = new Map<string, { startedAt: number; pageUrl?: string }>();
 
@@ -626,6 +669,9 @@ const attachNetworkTracking = (
       latencyMs: startedEntry ? Date.now() - startedEntry.startedAt : undefined,
       contentType: shape.contentType,
       responseShape: shape.responseShape,
+      requestHeaders: request.headers(),
+      responseHeaders: response.headers(),
+      deviceName,
     });
     started.delete(url);
   });
@@ -645,6 +691,8 @@ const attachNetworkTracking = (
       failed: true,
       failureText: request.failure()?.errorText,
       latencyMs: startedEntry ? Date.now() - startedEntry.startedAt : undefined,
+      requestHeaders: request.headers(),
+      deviceName,
     });
     started.delete(url);
   });
@@ -666,7 +714,7 @@ const buildCoverageReport = (results: InteractionResult[], total: number) => {
 const uniqueFindings = (findings: RuntimeFinding[]) => {
   const seen = new Set<string>();
   return findings.filter((finding) => {
-    const key = `${finding.type}:${finding.pageUrl}:${finding.summary}:${finding.details}`;
+    const key = `${finding.deviceName ?? "Desktop"}:${finding.type}:${finding.pageUrl}:${finding.summary}:${finding.details}`;
     if (seen.has(key)) {
       return false;
     }
@@ -739,13 +787,14 @@ const readRobotsRules = async (baseUrl: URL, enabled: boolean) => {
 const isRobotsAllowed = (target: URL, disallowRules: string[]) =>
   !disallowRules.some((rule) => rule !== "/" && target.pathname.startsWith(rule));
 
-const toPageAnalysis = (entry: CrawlPageEntry): PageAnalysis => ({
+const toPageAnalysis = (entry: CrawlPageEntry, deviceName?: MobileDeviceProfile): PageAnalysis => ({
   ...entry.snapshot,
   url: entry.url,
   routePath: entry.routeKey,
   depth: entry.depth,
   previewImageUrl: entry.previewImageUrl,
   htmlPreview: entry.htmlPreview,
+  deviceName: entry.snapshot.deviceName ?? deviceName,
 });
 
 const buildLiveSession = ({
@@ -1085,6 +1134,7 @@ const discoverConnectedPages = async ({
   maxPages,
   maxDepth,
   maxLinksPerPage,
+  pageKeyPrefix,
   runId,
   domainAllowlist,
   excludePathPatterns,
@@ -1101,6 +1151,7 @@ const discoverConnectedPages = async ({
   maxPages: number;
   maxDepth: number;
   maxLinksPerPage: number;
+  pageKeyPrefix?: string;
   runId: string;
   domainAllowlist: string[];
   excludePathPatterns: string[];
@@ -1159,7 +1210,7 @@ const discoverConnectedPages = async ({
     await gotoStable(page, next.url, env.crawler.timeoutMs);
     await maybeHandleLoginSurface?.();
 
-    const pageKey = `p${discoveredPages.length + 1}`;
+    const pageKey = `${pageKeyPrefix ?? ""}p${discoveredPages.length + 1}`;
     const scraped = await scrapePage(page, next.url, pageKey, maxLinksPerPage);
     const baselineSignature = await getPageSignature(page);
     const previewImageUrl = await capturePreviewImage({
@@ -1347,6 +1398,7 @@ const evaluateInteraction = async ({
   consoleEvents,
   networkRequests,
   runId,
+  deviceName,
 }: {
   page: Page;
   pageUrl: string;
@@ -1355,6 +1407,7 @@ const evaluateInteraction = async ({
   consoleEvents: string[];
   networkRequests: NetworkObservation[];
   runId: string;
+  deviceName: MobileDeviceProfile;
 }): Promise<{ result: InteractionResult; edge: NavigationEdge }> => {
   await restorePageState(page, pageUrl);
   await annotateAndExtractInteractiveElements(page, pageUrl, pageKey);
@@ -1507,6 +1560,7 @@ const evaluateInteraction = async ({
           behaviorSignals,
           screenshotPath,
           screenshotUrl,
+          deviceName,
         },
       edge: {
         from: beforeUrl,
@@ -1572,6 +1626,7 @@ const evaluateInteraction = async ({
         },
         screenshotPath,
         screenshotUrl,
+        deviceName,
       },
       edge: {
         from: beforeUrl,
@@ -1603,6 +1658,8 @@ export const crawlFrontend = async (
   const domainAllowlist = request.options?.domainAllowlist ?? [baseUrl.hostname];
   const excludePathPatterns = profile.excludePathPatterns;
   const resumeFrom = request.options?.resumeFrom;
+  const deviceName = resolveDeviceProfile(request);
+  const deviceKeyPrefix = deviceName === "Desktop" ? "" : `${deviceName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_`;
   const launchHeadless = request.auth?.login?.manualCheckpoint?.enabled
     ? false
     : request.auth?.login?.headed === true
@@ -1614,6 +1671,7 @@ export const crawlFrontend = async (
   const contextOptions: BrowserContextOptions = {
     ignoreHTTPSErrors: true,
     extraHTTPHeaders: request.auth?.headers,
+    ...mobileDeviceProfiles[deviceName],
   };
 
   if (request.auth?.storageStatePath) {
@@ -1659,7 +1717,7 @@ export const crawlFrontend = async (
   const consoleEvents: string[] = [];
   const runtimeFindings: RuntimeFinding[] = [];
   const loginPromptState = { handled: false };
-  attachNetworkTracking(context, networkRequests, baseUrl);
+  attachNetworkTracking(context, networkRequests, baseUrl, deviceName);
 
   page.on("console", (message) => {
     const line = `[${message.type()}] ${message.text()}`.slice(0, 240);
@@ -1673,6 +1731,7 @@ export const crawlFrontend = async (
         summary: "Console error captured",
         details: line,
         evidence: [line],
+        deviceName,
       });
     }
   });
@@ -1687,6 +1746,7 @@ export const crawlFrontend = async (
       summary: "Unhandled JavaScript exception captured",
       details: line,
       evidence: [line],
+      deviceName,
     });
   });
 
@@ -1694,8 +1754,8 @@ export const crawlFrontend = async (
     await callbacks?.onProgress?.({
       stageKey: "preparing-session",
       stageLabel: "Preparing session",
-      summary: `Opening browser session (${profile.name} profile)`,
-      technical: `Starting browser context and applying crawl controls for the ${profile.name} profile.`,
+      summary: `Opening browser session (${profile.name} profile, ${deviceName})`,
+      technical: `Starting browser context and applying crawl controls for the ${profile.name} profile on ${deviceName}.`,
       currentPageUrl: baseUrl.toString(),
       expectedDurationSeconds: Math.max(45, maxPages * 8),
       pagesDiscovered: 0,
@@ -1756,6 +1816,7 @@ export const crawlFrontend = async (
       maxPages,
       maxDepth,
       maxLinksPerPage,
+      pageKeyPrefix: deviceKeyPrefix,
       runId,
       domainAllowlist,
       excludePathPatterns,
@@ -1779,7 +1840,7 @@ export const crawlFrontend = async (
       },
       onDiscoveredPage: async (pages, latest) => {
         const detectedInteractions = pages.reduce((sum, entry) => sum + entry.interactiveElements.length, 0);
-        const persistedPage = toPageAnalysis(latest);
+        const persistedPage = toPageAnalysis(latest, deviceName);
         await callbacks?.onPage?.(persistedPage);
         await callbacks?.onProgress?.({
           stageKey: "discovering-pages",
@@ -1838,9 +1899,14 @@ export const crawlFrontend = async (
         callbacks,
         promptState: loginPromptState,
       });
-      runtimeFindings.push(...(await analyzeAccessibility(page, entry.url)));
       runtimeFindings.push(
-        ...(await analyzeVisualRegression(page, entry.url, entry.baselineSignature ?? "")),
+        ...(await analyzeAccessibility(page, entry.url)).map((finding) => ({ ...finding, deviceName })),
+      );
+      runtimeFindings.push(
+        ...(await analyzeVisualRegression(page, entry.url, entry.baselineSignature ?? "")).map((finding) => ({
+          ...finding,
+          deviceName,
+        })),
       );
 
       await callbacks?.onProgress?.({
@@ -1891,6 +1957,7 @@ export const crawlFrontend = async (
           consoleEvents,
           networkRequests,
           runId,
+          deviceName,
         });
 
         interactionResults.push(result);
@@ -1957,21 +2024,32 @@ export const crawlFrontend = async (
     }
 
     warnings.unshift(
-      `Crawl profile: ${profile.name}; maxPages=${maxPages}; maxDepth=${maxDepth}; maxInteractionsPerPage=${maxInteractionsPerPage}.`,
+      `Crawl profile: ${profile.name}; device=${deviceName}; maxPages=${maxPages}; maxDepth=${maxDepth}; maxInteractionsPerPage=${maxInteractionsPerPage}.`,
     );
 
     const scenarioPass = await executeScenarioPacks({
       page,
-      pages: discoveredPages.map((entry) => toPageAnalysis(entry)),
+      pages: discoveredPages.map((entry) => toPageAnalysis(entry, deviceName)),
       runId,
+      deviceName,
     });
     const boundaryPass = await runBoundaryAndLimitChecks({
       page,
-      pages: discoveredPages.map((entry) => toPageAnalysis(entry)),
+      pages: discoveredPages.map((entry) => toPageAnalysis(entry, deviceName)),
       runId,
+      deviceName,
     });
 
-    runtimeFindings.push(...scenarioPass.runtimeFindings, ...boundaryPass.runtimeFindings);
+    const scenarioResults = [...scenarioPass.scenarioResults, ...boundaryPass.scenarioResults].map((scenario) => ({
+      ...scenario,
+      deviceName,
+    }));
+    runtimeFindings.push(
+      ...[...scenarioPass.runtimeFindings, ...boundaryPass.runtimeFindings].map((finding) => ({
+        ...finding,
+        deviceName,
+      })),
+    );
 
     networkRequests
       .filter((request) => request.failed || (typeof request.status === "number" && request.status >= 400))
@@ -1988,6 +2066,7 @@ export const crawlFrontend = async (
             request.failureText ?? `status:${request.status ?? "unknown"}`,
             request.latencyMs ? `latency:${request.latencyMs}` : "latency:unknown",
           ],
+          deviceName,
         });
       });
 
@@ -2003,6 +2082,7 @@ export const crawlFrontend = async (
           summary: "API assertion failed",
           details: `${assertion.method} ${assertion.url}`,
           evidence: assertion.issues,
+          deviceName,
         });
       });
 
@@ -2013,7 +2093,7 @@ export const crawlFrontend = async (
     return {
       baseUrl: baseUrl.toString(),
       pages: discoveredPages.map((entry) => ({
-        ...toPageAnalysis(entry),
+        ...toPageAnalysis(entry, deviceName),
         interactionNotes: [
           ...entry.snapshot.interactionNotes,
           `Tested ${Math.min(entry.interactiveElements.length, maxInteractionsPerPage)} interactions on this page`,
@@ -2026,8 +2106,24 @@ export const crawlFrontend = async (
       coverageReport,
       failureClusters,
       runtimeFindings: uniqueFindings(runtimeFindings),
-      scenarioResults: [...scenarioPass.scenarioResults, ...boundaryPass.scenarioResults],
+      scenarioResults,
       apiAssertions,
+      securityFindings: [],
+      coverageScore: {
+        pagesDiscovered: 0,
+        pagesTested: 0,
+        formsDetected: 0,
+        formsTested: 0,
+        buttonsDetected: 0,
+        buttonsTested: 0,
+        linksDetected: 0,
+        linksValidated: 0,
+        mobileDevicesTested: [],
+        apiEndpointsObserved: 0,
+        apiEndpointsAnalyzed: 0,
+        overallScore: 0,
+      },
+      rootCauseAnalyses: [],
       warnings,
     };
   } catch (error) {

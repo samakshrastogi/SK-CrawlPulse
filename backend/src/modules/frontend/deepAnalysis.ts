@@ -331,6 +331,7 @@ export const buildApiAssertions = async (requests: NetworkObservation[]): Promis
         passed: issues.length === 0,
         issues,
         responseShape: request.responseShape,
+        deviceName: request.deviceName,
       };
     });
 
@@ -356,13 +357,16 @@ export const executeScenarioPacks = async ({
   page,
   pages,
   runId,
+  deviceName,
 }: {
   page: Page;
   pages: PageAnalysis[];
   runId: string;
+  deviceName?: string;
 }): Promise<{ scenarioResults: ScenarioPackResult[]; runtimeFindings: RuntimeFinding[] }> => {
   const scenarioResults: ScenarioPackResult[] = [];
   const runtimeFindings: RuntimeFinding[] = [];
+  const devicePrefix = deviceName ? `${deviceName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_` : "";
 
   for (const currentPage of pages) {
     await gotoScenarioPage(page, currentPage.url, env.crawler.timeoutMs);
@@ -536,13 +540,16 @@ export const runBoundaryAndLimitChecks = async ({
   page,
   pages,
   runId,
+  deviceName,
 }: {
   page: Page;
   pages: PageAnalysis[];
   runId: string;
+  deviceName?: string;
 }): Promise<{ scenarioResults: ScenarioPackResult[]; runtimeFindings: RuntimeFinding[] }> => {
   const scenarioResults: ScenarioPackResult[] = [];
   const runtimeFindings: RuntimeFinding[] = [];
+  const devicePrefix = deviceName ? `${deviceName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_` : "";
 
   for (const currentPage of pages) {
     await gotoScenarioPage(page, currentPage.url, env.crawler.timeoutMs);
@@ -622,7 +629,7 @@ export const runBoundaryAndLimitChecks = async ({
       });
     }
 
-    const visualShot = await captureScenarioScreenshot(page, runId, `boundary-${scenarioResults.length + 1}.png`).catch(() => undefined);
+    const visualShot = await captureScenarioScreenshot(page, runId, `${devicePrefix}boundary-${scenarioResults.length + 1}.png`).catch(() => undefined);
     if (visualShot) {
       runtimeFindings.push({
         findingId: `visual_baseline_${Date.now()}`,

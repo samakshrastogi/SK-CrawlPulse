@@ -56,6 +56,12 @@ export function AnalysisForm({
     });
   };
 
+  const toggleDevice = (device: NonNullable<AnalysisOptions["mobileDevices"]>[number]) => {
+    const current = analysisOptions.mobileDevices ?? ["Desktop"];
+    const next = current.includes(device) ? current.filter((item) => item !== device) : [...current, device];
+    updateOptions({ mobileDevices: next.length > 0 ? next : ["Desktop"] });
+  };
+
   return (
     <form
       onSubmit={onSubmit}
@@ -173,6 +179,23 @@ export function AnalysisForm({
               autoComplete="off"
             />
           </label>
+
+          <div className="lg:col-span-4">
+            <span className={fieldLabelClassName}>Mobile devices</span>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              {(["Desktop", "iPhone 15", "Pixel 7", "Galaxy S23", "iPad"] as const).map((device) => (
+                <label key={device} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-slate-200">
+                  <span>{device}</span>
+                  <input
+                    type="checkbox"
+                    checked={(analysisOptions.mobileDevices ?? ["Desktop"]).includes(device)}
+                    onChange={() => toggleDevice(device)}
+                    className="h-4 w-4 accent-cyan-300"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
