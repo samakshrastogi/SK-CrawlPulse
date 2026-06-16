@@ -11,17 +11,28 @@ type ViewTabsProps = {
   onWebsiteChange: (website: string) => void;
 };
 
-const tabs: Array<{ id: AppView; label: string; description: string }> = [
-  { id: "overview", label: "Overview", description: "Executive signal" },
-  { id: "run", label: "Run", description: "Launch and monitor" },
-  { id: "pages", label: "Pages", description: "Routes and coverage" },
-  { id: "findings", label: "Findings", description: "Triage evidence" },
-  { id: "tests", label: "Tests", description: "Generated checks" },
-  { id: "report", label: "Report", description: "Handoff summary" },
-  { id: "history", label: "History", description: "Previous runs" },
-  { id: "compare", label: "Compare", description: "Run deltas" },
-  { id: "profile", label: "Profile", description: "User workspace" },
+const tabs: Array<{ id: AppView; label: string; description: string; icon: QaIconName }> = [
+  { id: "overview", label: "Overview", description: "Executive signal", icon: "dashboard" },
+  { id: "run", label: "Run", description: "Launch and monitor", icon: "playcheck" },
+  { id: "pages", label: "Pages", description: "Routes and coverage", icon: "pages" },
+  { id: "findings", label: "Findings", description: "Triage evidence", icon: "bug" },
+  { id: "tests", label: "Tests", description: "Generated checks", icon: "checklist" },
+  { id: "report", label: "Report", description: "Handoff summary", icon: "report" },
+  { id: "history", label: "History", description: "Previous runs", icon: "history" },
+  { id: "compare", label: "Compare", description: "Run deltas", icon: "compare" },
+  { id: "profile", label: "Profile", description: "User workspace", icon: "user" },
 ];
+
+type QaIconName =
+  | "dashboard"
+  | "playcheck"
+  | "pages"
+  | "bug"
+  | "checklist"
+  | "report"
+  | "history"
+  | "compare"
+  | "user";
 
 export function ViewTabs({
   activeView,
@@ -159,7 +170,9 @@ export function ViewTabs({
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-3">
-                  <span className="tab-marker h-2.5 w-2.5 shrink-0 rounded-full" />
+                  <span className="qa-nav-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.9rem] border border-cyan-300/15 bg-cyan-400/8 text-cyan-200">
+                    <QaIcon name={tab.icon} />
+                  </span>
                   <span className="min-w-0 text-left">
                     <span className="block truncate text-sm font-semibold">{tab.label}</span>
                     <span className="tab-description mt-0.5 block truncate text-[11px] font-normal">{tab.description}</span>
@@ -217,4 +230,102 @@ export function ViewTabs({
         : null}
     </section>
   );
+}
+
+function QaIcon({ name }: { name: QaIconName }) {
+  const common = {
+    className: "h-4.5 w-4.5",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": "true" as const,
+  };
+
+  switch (name) {
+    case "dashboard":
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      );
+    case "playcheck":
+      return (
+        <svg {...common}>
+          <path d="M7 5v14l10-7-10-7z" />
+          <path d="m15 18 2 2 4-5" />
+        </svg>
+      );
+    case "pages":
+      return (
+        <svg {...common}>
+          <path d="M7 3h8l4 4v14H7z" />
+          <path d="M15 3v5h5" />
+          <path d="M4 7v14h11" />
+        </svg>
+      );
+    case "bug":
+      return (
+        <svg {...common}>
+          <path d="M8 8h8v9a4 4 0 0 1-8 0z" />
+          <path d="M9 4l2 3" />
+          <path d="m15 4-2 3" />
+          <path d="M4 13h4" />
+          <path d="M16 13h4" />
+          <path d="M5 19l3-2" />
+          <path d="m16 17 3 2" />
+        </svg>
+      );
+    case "checklist":
+      return (
+        <svg {...common}>
+          <path d="m4 6 2 2 4-4" />
+          <path d="M13 6h7" />
+          <path d="m4 14 2 2 4-4" />
+          <path d="M13 14h7" />
+          <path d="M13 20h7" />
+        </svg>
+      );
+    case "report":
+      return (
+        <svg {...common}>
+          <path d="M6 3h9l3 3v15H6z" />
+          <path d="M15 3v4h4" />
+          <path d="M9 13h6" />
+          <path d="M9 17h4" />
+          <path d="M9 9h2" />
+        </svg>
+      );
+    case "history":
+      return (
+        <svg {...common}>
+          <path d="M4 12a8 8 0 1 0 2.35-5.65" />
+          <path d="M4 5v5h5" />
+          <path d="M12 8v5l3 2" />
+        </svg>
+      );
+    case "compare":
+      return (
+        <svg {...common}>
+          <path d="M7 7h13" />
+          <path d="m17 4 3 3-3 3" />
+          <path d="M17 17H4" />
+          <path d="m7 14-3 3 3 3" />
+        </svg>
+      );
+    case "user":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5 21a7 7 0 0 1 14 0" />
+        </svg>
+      );
+    default:
+      return null;
+  }
 }
