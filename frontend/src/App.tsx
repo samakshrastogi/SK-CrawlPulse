@@ -658,7 +658,7 @@ export default function App() {
       case "tests":
         return <TestsView result={filteredResult} filters={globalFilters} />;
       case "report":
-        return <ReportView result={filteredResult} filters={globalFilters} />;
+        return <ReportView result={filteredResult} currentRun={filteredCurrentRun} filters={globalFilters} />;
       case "history":
         return (
           <HistoryView

@@ -14,6 +14,7 @@ import {
   buildRunHtmlReport,
   buildRunJsonExport,
 } from "../modules/reporting/exportBuilder";
+import { generateProfessionalPdfReport } from "../modules/reporting/pdfReportService";
 import type { AnalysisRequest, LoginPromptAction } from "../types/platform";
 
 export const analysisRouter = Router();
@@ -131,6 +132,24 @@ analysisRouter.get("/runs/:runId/export/playwright", async (req, res, next) => {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="sk-crawlpulse-${run.runId}.spec.ts"`);
     res.status(200).send(buildPlaywrightSpecExport(run));
+  } catch (error) {
+    next(error);
+  }
+});
+
+analysisRouter.get("/runs/:runId/export/pdf", async (req, res, next) => {
+  try {
+    const run = await getPlatformAnalysisRun(req.params.runId);
+    if (!run) {
+      throw new HttpError(404, "run not found");
+    }
+
+    if (run.status !== "completed" || !run.result) {
+      throw new HttpError(409, "PDF report can only be generated for a completed run");
+    }
+
+    const report = await generateProfessionalPdfReport(run);
+    res.download(report.outputPath, report.fileName);
   } catch (error) {
     next(error);
   }

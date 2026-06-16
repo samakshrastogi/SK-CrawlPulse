@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { runtime } from "../config/runtime";
 import { EmptyStatePanel } from "./EmptyStatePanel";
-import type { AnalysisResponse, GlobalFilters } from "../types/analysis";
+import type { AnalysisResponse, AnalysisRun, GlobalFilters } from "../types/analysis";
 
 type ReportViewProps = {
   result: AnalysisResponse | null;
+  currentRun: AnalysisRun | null;
   filters: GlobalFilters;
 };
 
@@ -62,9 +63,11 @@ const EMPTY_RESULT: AnalysisResponse = {
   },
 };
 
-export function ReportView({ result, filters }: ReportViewProps) {
+export function ReportView({ result, currentRun, filters }: ReportViewProps) {
   const [section, setSection] = useState<SectionKey>("summary");
   const [showFlowchartSource, setShowFlowchartSource] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   const safeResult = result ?? EMPTY_RESULT;
 
   const flowSteps = useMemo(
@@ -134,6 +137,37 @@ export function ReportView({ result, filters }: ReportViewProps) {
   });
   const qualityGate = buildQualityGate(result);
   const exportBaseUrl = `${runtime.apiBaseUrl}${runtime.analysisApiPath}/runs/${result.runId}/export`;
+  const canDownloadPdf = currentRun?.status === "completed" && Boolean(result.runId);
+
+  const downloadPdfReport = async () => {
+    if (!canDownloadPdf) {
+      return;
+    }
+
+    setPdfLoading(true);
+    setPdfError("");
+    try {
+      const response = await fetch(`${exportBaseUrl}/pdf`);
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Report generation failed.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `SK-CrawlPulse-Report-${result.runId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      setPdfError(error instanceof Error ? error.message : "Report generation failed.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   return (
     <section className="min-w-0 grid gap-4">
@@ -179,6 +213,32 @@ export function ReportView({ result, filters }: ReportViewProps) {
             value={dominantType?.label ?? "--"}
           />
         </div>
+
+        <article className="min-w-0 rounded-2xl border border-cyan-300/14 bg-[linear-gradient(135deg,rgba(8,47,73,0.5)_0%,rgba(15,23,42,0.9)_100%)] p-4 fade-in-up">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Professional PDF Report</p>
+              <h3 className="mt-2 break-words text-lg font-semibold text-white">Download a stakeholder-ready website testing report</h3>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                Download a complete website testing report designed for both technical and non-technical stakeholders.
+              </p>
+              {pdfError ? (
+                <p className="mt-3 rounded-2xl border border-rose-300/20 bg-rose-400/10 px-3 py-2 text-sm text-rose-100">
+                  {pdfError}
+                </p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={downloadPdfReport}
+              disabled={!canDownloadPdf || pdfLoading}
+              className="tab-motion min-h-[44px] shrink-0 rounded-full border border-cyan-300/25 bg-cyan-400/12 px-5 py-3 text-sm font-semibold text-cyan-100 shadow-[0_12px_30px_rgba(34,211,238,0.12)] transition hover:bg-cyan-400/18 disabled:cursor-not-allowed disabled:opacity-45"
+              title={canDownloadPdf ? "Download PDF Report" : "Run must be completed before report download"}
+            >
+              {pdfLoading ? "Generating Report..." : canDownloadPdf ? "Download PDF Report" : "Run must be completed before report download"}
+            </button>
+          </div>
+        </article>
 
         {section === "summary" ? (
           <div className="min-w-0 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
