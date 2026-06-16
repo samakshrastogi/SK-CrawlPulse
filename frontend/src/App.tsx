@@ -19,10 +19,11 @@ import { TopStatusStrip } from "./components/TopStatusStrip";
 import { ViewTabs } from "./components/ViewTabs";
 import { runtime } from "./config/runtime";
 import type { AuthSession } from "./components/AuthPage";
-import type { AnalysisOptions, AnalysisResponse, AnalysisRun, AnalysisSubmission, AppView, GlobalFilters, SavedProject } from "./types/analysis";
+import type { AnalysisOptions, AnalysisResponse, AnalysisRun, AnalysisSubmission, AppNotification, AppView, GlobalFilters, SavedProject } from "./types/analysis";
 
 const API_BASE_URL = runtime.apiBaseUrl;
 const ANALYSIS_API_BASE_URL = `${API_BASE_URL}${runtime.analysisApiPath}`;
+const NOTIFICATIONS_API_BASE_URL = `${API_BASE_URL}/api/notifications`;
 const DEFAULT_ANALYSIS_OPTIONS = runtime.defaultAnalysisOptions;
 const SAVED_PROJECTS_KEY = "sk-crawlpulse:saved-projects";
 const APP_STATE_KEY = "sk-crawlpulse:app-state";
@@ -146,6 +147,7 @@ export default function App() {
   const [currentRun, setCurrentRun] = useState<AnalysisRun | null>(null);
   const [historyRuns, setHistoryRuns] = useState<AnalysisRun[]>([]);
   const [comparisonRuns, setComparisonRuns] = useState<AnalysisRun[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
   const [error, setError] = useState("");
   const [urlError, setUrlError] = useState("");
@@ -168,6 +170,8 @@ export default function App() {
     globalFilters.status !== "all" ||
     globalFilters.severity !== "all" ||
     globalFilters.issueType !== "all";
+
+  const unreadNotifications = notifications.filter((notification) => !notification.readAt).length;
 
   const websiteOptions = Array.from(
     new Set(
@@ -372,6 +376,47 @@ export default function App() {
   }, [savedProjects]);
 
   useEffect(() => {
+    if (!authSession?.email) {
+      setNotifications([]);
+      return;
+    }
+
+    let cancelled = false;
+    const encodedEmail = encodeURIComponent(authSession.email);
+
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch(`${NOTIFICATIONS_API_BASE_URL}?email=${encodedEmail}`);
+        const nextNotifications = (await response.json()) as AppNotification[];
+        if (response.ok && !cancelled) {
+          setNotifications(nextNotifications);
+        }
+      } catch {
+        // Keep the current notification list.
+      }
+    };
+
+    void loadNotifications();
+
+    const stream = new EventSource(`${NOTIFICATIONS_API_BASE_URL}/stream?email=${encodedEmail}`);
+    stream.onmessage = (event) => {
+      const notification = JSON.parse(event.data) as AppNotification;
+      setNotifications((current) => [
+        notification,
+        ...current.filter((item) => item.notificationId !== notification.notificationId),
+      ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()));
+    };
+    stream.onerror = () => {
+      stream.close();
+    };
+
+    return () => {
+      cancelled = true;
+      stream.close();
+    };
+  }, [authSession?.email]);
+
+  useEffect(() => {
     if (!restored) {
       return;
     }
@@ -521,6 +566,12 @@ export default function App() {
 
     const payload: AnalysisSubmission = {
       targetUrl,
+      operator: authSession
+        ? {
+            email: authSession.email,
+            name: authSession.name,
+          }
+        : undefined,
       backend: {
         githubRepoUrl: repoUrl || undefined,
         uploadedPath: uploadedPath || undefined,
@@ -663,6 +714,53 @@ export default function App() {
     }
   };
 
+  const markNotificationRead = async (notificationId: string) => {
+    if (!authSession?.email) {
+      return;
+    }
+
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.notificationId === notificationId
+          ? { ...notification, readAt: notification.readAt ?? new Date().toISOString() }
+          : notification,
+      ),
+    );
+
+    try {
+      await fetch(`${NOTIFICATIONS_API_BASE_URL}/${notificationId}/read`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: authSession.email }),
+      });
+    } catch {
+      // The next notification refresh will reconcile state.
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    if (!authSession?.email) {
+      return;
+    }
+
+    const readAt = new Date().toISOString();
+    setNotifications((current) => current.map((notification) => ({ ...notification, readAt: notification.readAt ?? readAt })));
+
+    try {
+      await fetch(`${NOTIFICATIONS_API_BASE_URL}/read-all`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: authSession.email }),
+      });
+    } catch {
+      // The next notification refresh will reconcile state.
+    }
+  };
+
   const applyPendingLandingUrl = () => {
     const pendingUrl = window.localStorage.getItem(PENDING_LANDING_URL_KEY);
     if (!pendingUrl && !hasLandingIntent) {
@@ -745,7 +843,14 @@ export default function App() {
             </div>
           </header>
 
-          <TopBar user={authSession} onSignOut={signOut} />
+          <TopBar
+            user={authSession}
+            notifications={notifications}
+            unreadCount={unreadNotifications}
+            onMarkNotificationRead={markNotificationRead}
+            onMarkAllNotificationsRead={markAllNotificationsRead}
+            onSignOut={signOut}
+          />
 
           <div className="workspace-layout grid min-w-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
             <ViewTabs

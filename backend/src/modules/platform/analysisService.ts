@@ -22,6 +22,7 @@ import {
   updateAnalysisRunProgress,
 } from "./runStore";
 import { publishRunEvent, subscribeToRunEvents } from "./runEvents";
+import { notifyAnalysisRun } from "../notifications/notificationService";
 import { env } from "../../config/env";
 import type {
   AnalysisRequest,
@@ -206,6 +207,14 @@ const createQueuedRun = async ({
   });
 
   void drainQueue();
+  void notifyAnalysisRun(
+    run,
+    retryOfRunId ? "analysis_retry" : "analysis_queued",
+    retryOfRunId ? "SK CrawlPulse retry queued" : "SK CrawlPulse analysis queued",
+    retryOfRunId
+      ? `A retry run has been queued for ${request.targetUrl}.`
+      : `A new analysis run has been queued for ${request.targetUrl}.`,
+  );
   return run;
 };
 
@@ -718,6 +727,16 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
           progress: nextProgress,
         });
         await logRun(runId, "auth", checkpoint.instructions);
+        void notifyAnalysisRun(
+          {
+            ...buffer.snapshot,
+            status: "awaiting_checkpoint",
+            progress: nextProgress,
+          },
+          "analysis_checkpoint",
+          "SK CrawlPulse needs your input",
+          `The analysis for ${request.targetUrl} is waiting at a checkpoint: ${checkpoint.label}.`,
+        );
 
         let timedOut = false;
         let timeout: NodeJS.Timeout | undefined;
@@ -887,6 +906,17 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
     });
     buffer.snapshot.status = "completed";
     buffer.snapshot.progress = completedProgress;
+    void notifyAnalysisRun(
+      {
+        ...buffer.snapshot,
+        result,
+        status: "completed",
+        progress: completedProgress,
+      },
+      "analysis_completed",
+      "SK CrawlPulse analysis completed",
+      `The analysis for ${request.targetUrl} completed with ${mergedFrontend.failureClusters.length} failure cluster${mergedFrontend.failureClusters.length === 1 ? "" : "s"} and ${mergedFrontend.runtimeFindings.length} finding${mergedFrontend.runtimeFindings.length === 1 ? "" : "s"}.`,
+    );
     await logRun(runId, "queue", "completed");
   } catch (error) {
     if (error instanceof DedicatedLoginSessionError) {
@@ -907,6 +937,17 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
       buffer.snapshot.status = "failed";
       buffer.snapshot.error = error.message;
       buffer.snapshot.progress = handedOffProgress;
+      void notifyAnalysisRun(
+        {
+          ...buffer.snapshot,
+          status: "failed",
+          error: error.message,
+          progress: handedOffProgress,
+        },
+        "analysis_checkpoint",
+        "SK CrawlPulse moved to login session",
+        `The analysis for ${request.targetUrl} moved to a dedicated login session.`,
+      );
       return;
     }
 
@@ -928,6 +969,17 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
     buffer.snapshot.status = "failed";
     buffer.snapshot.error = message;
     buffer.snapshot.progress = failedProgress;
+    void notifyAnalysisRun(
+      {
+        ...buffer.snapshot,
+        status: "failed",
+        error: message,
+        progress: failedProgress,
+      },
+      "analysis_failed",
+      "SK CrawlPulse analysis failed",
+      `The analysis for ${request.targetUrl} stopped before completion: ${message}`,
+    );
   } finally {
     clearInterval(leaseHeartbeat);
     const buffer = getRunBuffer(runId);

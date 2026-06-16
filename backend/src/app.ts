@@ -4,6 +4,7 @@ import express from "express";
 import { env } from "./config/env";
 import { analysisRouter } from "./routes/analysis";
 import { authRouter } from "./routes/auth";
+import { notificationRouter } from "./routes/notifications";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -47,6 +48,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/notifications", notificationRouter);
 app.use(env.runtime.analysisApiRoute, analysisRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);

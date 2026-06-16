@@ -159,6 +159,10 @@ export type AnalysisResponse = {
 
 export type AnalysisSubmission = {
   targetUrl: string;
+  operator?: {
+    email?: string;
+    name?: string;
+  };
   backend: {
     githubRepoUrl?: string;
     uploadedPath?: string;
@@ -210,6 +214,31 @@ export type SavedProject = {
   uploadedPath: string;
   pinned: boolean;
   lastUsedAt: string;
+};
+
+export type AppNotification = {
+  notificationId: string;
+  recipientEmail: string;
+  recipientName?: string;
+  kind:
+    | "analysis_queued"
+    | "analysis_running"
+    | "analysis_checkpoint"
+    | "analysis_completed"
+    | "analysis_failed"
+    | "analysis_retry"
+    | "auth";
+  title: string;
+  message: string;
+  runId?: string;
+  targetUrl?: string;
+  status?: string;
+  readAt?: string;
+  emailStatus: "pending" | "sent" | "failed" | "skipped";
+  emailProviderId?: string;
+  emailError?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AnalysisRun = {

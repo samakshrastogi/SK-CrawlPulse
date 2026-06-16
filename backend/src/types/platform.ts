@@ -78,6 +78,10 @@ export interface AuthConfig {
 
 export interface AnalysisRequest {
   targetUrl: string;
+  operator?: {
+    email?: string;
+    name?: string;
+  };
   backend?: {
     githubRepoUrl?: string;
     uploadedPath?: string;

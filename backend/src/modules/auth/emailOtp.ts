@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import nodemailer from "nodemailer";
 import { env } from "../../config/env";
+import { escapeHtml, sendEmail } from "../mail/resendMailer";
 
 type PendingEmailOtp = {
   email: string;
@@ -25,45 +25,11 @@ const hashOtp = (otp: string, salt: string) => crypto.createHash("sha256").updat
 
 const createOtp = () => crypto.randomInt(100000, 1000000).toString();
 
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
-const getTransport = () => {
-  if (!env.mail.smtpHost) {
-    return null;
-  }
-
-  return nodemailer.createTransport({
-    host: env.mail.smtpHost,
-    port: env.mail.smtpPort,
-    secure: env.mail.smtpSecure,
-    auth:
-      env.mail.smtpUser && env.mail.smtpPass
-        ? {
-            user: env.mail.smtpUser,
-            pass: env.mail.smtpPass,
-          }
-        : undefined,
-  });
-};
-
 const sendOtpEmail = async (email: string, name: string, otp: string) => {
-  const transport = getTransport();
   const expiresIn = `${env.mail.otpTtlMinutes} minute${env.mail.otpTtlMinutes === 1 ? "" : "s"}`;
   const displayName = name || "there";
 
-  if (!transport) {
-    console.warn(`[auth] SMTP not configured. Registration OTP for ${email}: ${otp}`);
-    return;
-  }
-
-  await transport.sendMail({
-    from: env.mail.fromEmail,
+  await sendEmail({
     to: email,
     subject: "Your SK CrawlPulse verification code",
     text: [
