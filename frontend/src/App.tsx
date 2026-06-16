@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { AuthPage } from "./components/AuthPage";
 import { CompareView } from "./components/CompareView";
@@ -7,8 +7,10 @@ import { GlobalFilterModal } from "./components/GlobalFilterModal";
 import { HistoryView } from "./components/HistoryView";
 import { LandingPage } from "./components/LandingPage";
 import { MobileActionBar } from "./components/MobileActionBar";
+import { MobileNavigationDrawer } from "./components/MobileNavigationDrawer";
 import { OverviewView } from "./components/OverviewView";
 import { PagesView } from "./components/PagesView";
+import { ProfileView } from "./components/ProfileView";
 import { ReportView } from "./components/ReportView";
 import { RunView } from "./components/RunView";
 import { TestsView } from "./components/TestsView";
@@ -25,6 +27,7 @@ const DEFAULT_ANALYSIS_OPTIONS = runtime.defaultAnalysisOptions;
 const SAVED_PROJECTS_KEY = "sk-crawlpulse:saved-projects";
 const APP_STATE_KEY = "sk-crawlpulse:app-state";
 const AUTH_SESSION_KEY = "sk-crawlpulse:auth-session";
+const PENDING_LANDING_URL_KEY = "sk-crawlpulse:pending-landing-url";
 
 const createDefaultAnalysisOptions = (): AnalysisOptions => ({
   maxPages: DEFAULT_ANALYSIS_OPTIONS.maxPages,
@@ -134,6 +137,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [showAuthPage, setShowAuthPage] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register" | "forgot" | "reset">("login");
+  const [hasLandingIntent, setHasLandingIntent] = useState(false);
   const [targetUrl, setTargetUrl] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [uploadedPath, setUploadedPath] = useState("");
@@ -149,6 +153,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<AppView>("overview");
   const [restored, setRestored] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [globalFilters, setGlobalFilters] = useState<GlobalFilters>({
     website: defaultWebsiteFilter([], ""),
     route: "all",
@@ -188,6 +193,35 @@ export default function App() {
         historyRuns.find((run) => toWebsiteName(run.request.targetUrl) === globalFilters.website && run.result)?.result ??
         null;
 
+  const fetchHistory = useCallback(async (fallbackTargetUrl = "") => {
+    try {
+      const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs`);
+      const runs = (await response.json()) as AnalysisRun[];
+      if (response.ok) {
+        setHistoryRuns(runs);
+        setGlobalFilters((current) =>
+          !current.website
+            ? {
+                ...current,
+                website: defaultWebsiteFilter(runs, fallbackTargetUrl),
+              }
+            : current,
+        );
+      }
+    } catch {
+      // Keep current history state.
+    }
+  }, []);
+
+  const fetchRun = useCallback(async (runId: string) => {
+    const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${runId}`);
+    const run = (await response.json()) as AnalysisRun;
+    if (!response.ok) {
+      throw new Error("Failed to fetch run");
+    }
+    return run;
+  }, []);
+
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const idToken = hash.get("id_token");
@@ -219,6 +253,7 @@ export default function App() {
     setAuthSession(session);
     setShowAuthPage(false);
     window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+    applyPendingLandingUrl();
   };
 
   const signOut = () => {
@@ -230,6 +265,20 @@ export default function App() {
 
   const openAuth = (mode: typeof authMode) => {
     setAuthMode(mode);
+    setShowAuthPage(true);
+  };
+
+  const startFromLandingUrl = (nextTargetUrl: string) => {
+    const nextUrlError = validateTargetUrl(nextTargetUrl);
+    setTargetUrl(nextTargetUrl);
+    setUrlError(nextUrlError);
+    setGlobalFilters((current) => ({
+      ...current,
+      website: toWebsiteName(nextTargetUrl) || current.website,
+    }));
+    window.localStorage.setItem(PENDING_LANDING_URL_KEY, nextTargetUrl);
+    setHasLandingIntent(true);
+    setAuthMode("register");
     setShowAuthPage(true);
   };
 
@@ -247,6 +296,7 @@ export default function App() {
       }
 
       let restoredRunId: string | null = null;
+      let restoredTargetUrl = "";
       const storedState = window.localStorage.getItem(APP_STATE_KEY);
       if (storedState) {
         try {
@@ -261,6 +311,7 @@ export default function App() {
           };
 
           setTargetUrl(parsed.targetUrl ?? "");
+          restoredTargetUrl = parsed.targetUrl ?? "";
           setRepoUrl(parsed.repoUrl ?? "");
           setUploadedPath(parsed.uploadedPath ?? "");
           const defaultOptions = createDefaultAnalysisOptions();
@@ -294,7 +345,7 @@ export default function App() {
         }
       }
 
-      await fetchHistory();
+      await fetchHistory(restoredTargetUrl);
 
       if (restoredRunId) {
         try {
@@ -314,7 +365,7 @@ export default function App() {
     void restoreState();
 
     return () => streamRef.current?.close();
-  }, []);
+  }, [fetchHistory, fetchRun]);
 
   useEffect(() => {
     window.localStorage.setItem(SAVED_PROJECTS_KEY, JSON.stringify(savedProjects));
@@ -352,11 +403,14 @@ export default function App() {
     streamRef.current?.close();
     streamRef.current = null;
 
-    if (!currentRun || !["queued", "running", "awaiting_checkpoint"].includes(currentRun.status)) {
+    const currentRunId = currentRun?.runId;
+    const currentRunStatus = currentRun?.status;
+
+    if (!currentRunId || !currentRunStatus || !["queued", "running", "awaiting_checkpoint"].includes(currentRunStatus)) {
       return;
     }
 
-    const stream = new EventSource(`${ANALYSIS_API_BASE_URL}/runs/${currentRun.runId}/stream`);
+    const stream = new EventSource(`${ANALYSIS_API_BASE_URL}/runs/${currentRunId}/stream`);
     streamRef.current = stream;
 
     stream.onmessage = (event) => {
@@ -425,35 +479,6 @@ export default function App() {
       pinned: pinned || existing?.pinned || false,
       lastUsedAt: new Date().toISOString(),
     });
-  };
-
-  const fetchHistory = async () => {
-    try {
-      const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs`);
-      const runs = (await response.json()) as AnalysisRun[];
-      if (response.ok) {
-        setHistoryRuns(runs);
-        setGlobalFilters((current) =>
-          !current.website
-            ? {
-                ...current,
-                website: defaultWebsiteFilter(runs, targetUrl),
-              }
-            : current,
-        );
-      }
-    } catch {
-      // Keep current history state.
-    }
-  };
-
-  const fetchRun = async (runId: string) => {
-    const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${runId}`);
-    const run = (await response.json()) as AnalysisRun;
-    if (!response.ok) {
-      throw new Error("Failed to fetch run");
-    }
-    return run;
   };
 
   const retryRun = async (runId: string) => {
@@ -624,9 +649,40 @@ export default function App() {
             }}
           />
         );
+      case "profile":
+        return authSession ? (
+          <ProfileView
+            user={authSession}
+            runs={historyRuns}
+            savedProjects={savedProjects}
+            onSignOut={signOut}
+          />
+        ) : null;
       default:
         return null;
     }
+  };
+
+  const applyPendingLandingUrl = () => {
+    const pendingUrl = window.localStorage.getItem(PENDING_LANDING_URL_KEY);
+    if (!pendingUrl && !hasLandingIntent) {
+      return;
+    }
+
+    const nextTargetUrl = pendingUrl || targetUrl;
+    const nextUrlError = validateTargetUrl(nextTargetUrl);
+    if (!nextUrlError) {
+      setTargetUrl(nextTargetUrl);
+      setUrlError("");
+      setActiveView("run");
+      setGlobalFilters((current) => ({
+        ...current,
+        website: toWebsiteName(nextTargetUrl) || current.website,
+      }));
+    }
+
+    setHasLandingIntent(false);
+    window.localStorage.removeItem(PENDING_LANDING_URL_KEY);
   };
 
   if (!authSession) {
@@ -642,7 +698,7 @@ export default function App() {
         }}
       />
     ) : (
-      <LandingPage onOpenAuth={openAuth} />
+      <LandingPage onOpenAuth={openAuth} onTryWebsite={startFromLandingUrl} />
     );
   }
 
@@ -656,9 +712,39 @@ export default function App() {
         result={filteredResult}
         currentRun={filteredCurrentRun}
       />
+      <MobileNavigationDrawer
+        activeView={activeView}
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        onViewChange={setActiveView}
+      />
 
       <div className="dashboard-container mx-auto w-full max-w-[1600px] px-4 py-4 pb-24 sm:px-6 md:pb-6">
         <div className="grid min-w-0 gap-4">
+          <header className="mobile-topbar app-navbar-shell glass-surface rounded-[1.15rem] px-3 py-3 md:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                className="control-surface flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.9rem] text-sm font-bold text-cyan-200"
+                aria-label="Open navigation"
+              >
+                SK
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] uppercase tracking-[0.18em] text-cyan-300">SK CrawlPulse</p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-white">{activeView}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                className="control-surface rounded-full px-3 py-2 text-xs font-semibold text-slate-300"
+              >
+                Menu
+              </button>
+            </div>
+          </header>
+
           <TopBar user={authSession} onSignOut={signOut} />
 
           <div className="workspace-layout grid min-w-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
@@ -699,6 +785,7 @@ export default function App() {
         }}
         onCompare={() => setActiveView("compare")}
         onSave={() => saveCurrentProject(true)}
+        onProfile={() => setActiveView("profile")}
       />
     </main>
   );

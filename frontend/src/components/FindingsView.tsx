@@ -18,9 +18,18 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
   const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
   const [triage, setTriage] = useState<Record<string, TriageStatus>>({});
   const apiBaseUrl = runtime.apiBaseUrl;
-  const findings = result?.frontend.runtimeFindings ?? [];
-  const pages = result?.frontend.pages ?? [];
-  const interactions = result?.frontend.interactionResults ?? [];
+  const findings = useMemo(
+    () => result?.frontend.runtimeFindings ?? [],
+    [result?.frontend.runtimeFindings],
+  );
+  const pages = useMemo(
+    () => result?.frontend.pages ?? [],
+    [result?.frontend.pages],
+  );
+  const interactions = useMemo(
+    () => result?.frontend.interactionResults ?? [],
+    [result?.frontend.interactionResults],
+  );
 
   const filteredFindings = useMemo(
     () =>

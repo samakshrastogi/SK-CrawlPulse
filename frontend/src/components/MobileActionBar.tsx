@@ -6,6 +6,7 @@ type MobileActionBarProps = {
   onRetry: () => void;
   onCompare: () => void;
   onSave: () => void;
+  onProfile: () => void;
 };
 
 export function MobileActionBar({
@@ -16,14 +17,16 @@ export function MobileActionBar({
   onRetry,
   onCompare,
   onSave,
+  onProfile,
 }: MobileActionBarProps) {
   return (
-    <div className="mobile-action-shell fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-slate-950/94 px-4 py-3 backdrop-blur-xl md:hidden">
-      <div className="grid grid-cols-4 gap-2">
-        <ActionButton label="Run" tone="active" onClick={onRun} />
-        <ActionButton label="Retry" tone="fail" disabled={!canRetry} onClick={onRetry} />
-        <ActionButton label="Compare" tone="warn" disabled={!canCompare} onClick={onCompare} />
-        <ActionButton label="Save" tone="pass" disabled={!canSave} onClick={onSave} />
+    <div className="mobile-action-shell fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-slate-950/94 px-3 py-2 backdrop-blur-xl md:hidden">
+      <div className="grid grid-cols-5 gap-1.5">
+        <ActionButton label="Run" shortLabel="Run" tone="active" onClick={onRun} />
+        <ActionButton label="Retry" shortLabel="Try" tone="fail" disabled={!canRetry} onClick={onRetry} />
+        <ActionButton label="Compare" shortLabel="Cmp" tone="warn" disabled={!canCompare} onClick={onCompare} />
+        <ActionButton label="Save" shortLabel="Save" tone="pass" disabled={!canSave} onClick={onSave} />
+        <ActionButton label="Profile" shortLabel="Me" tone="active" onClick={onProfile} />
       </div>
     </div>
   );
@@ -31,11 +34,13 @@ export function MobileActionBar({
 
 function ActionButton({
   label,
+  shortLabel,
   tone,
   disabled,
   onClick,
 }: {
   label: string;
+  shortLabel: string;
   tone: "active" | "pass" | "warn" | "fail";
   disabled?: boolean;
   onClick: () => void;
@@ -52,11 +57,12 @@ function ActionButton({
   return (
     <button
       type="button"
+      aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-2xl border px-3 py-3 text-xs font-medium ${toneClass} disabled:cursor-not-allowed disabled:opacity-35`}
+      className={`min-w-0 rounded-[0.95rem] border px-1.5 py-2.5 text-[11px] font-semibold ${toneClass} disabled:cursor-not-allowed disabled:opacity-35`}
     >
-      {label}
+      <span className="block truncate">{shortLabel}</span>
     </button>
   );
 }

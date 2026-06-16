@@ -90,7 +90,7 @@ export function RunView({
   onReplaceRun,
   ...props
 }: RunViewProps) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [loginDecisionHandled, setLoginDecisionHandled] = useState<string | null>(null);
   const [dismissedErrorKey, setDismissedErrorKey] = useState<string | null>(null);
@@ -1599,7 +1599,7 @@ function LoginDecisionModal({
   loading: boolean;
   onChoose: (action: "continue_without_login" | "continue_after_login") => Promise<void>;
 }) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -1999,7 +1999,7 @@ function buildPreviewPageSummary({
     | null;
   pageDetails: AnalysisRun["pages"][number] | null;
   pageInteractions: AnalysisRun["interactions"];
-  pageFindings: AnalysisRun["result"] extends infer _T ? AnalysisResponse["frontend"]["runtimeFindings"] : never;
+  pageFindings: AnalysisResponse["frontend"]["runtimeFindings"];
   pagesFound: number;
   currentRoute: string;
 }) {

@@ -39,8 +39,14 @@ export function CompareView({ availableRuns, runs, onCompareRuns }: CompareViewP
   const leftResult = left?.result;
   const rightResult = right?.result;
 
-  const leftFindings = leftResult?.frontend.runtimeFindings ?? [];
-  const rightFindings = rightResult?.frontend.runtimeFindings ?? [];
+  const leftFindings = useMemo(
+    () => leftResult?.frontend.runtimeFindings ?? [],
+    [leftResult?.frontend.runtimeFindings],
+  );
+  const rightFindings = useMemo(
+    () => rightResult?.frontend.runtimeFindings ?? [],
+    [rightResult?.frontend.runtimeFindings],
+  );
 
   const newFindings = useMemo(
     () =>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { runtime } from "../config/runtime";
 
 export type AuthMode = "login" | "register" | "forgot" | "reset";
 
@@ -30,6 +31,12 @@ type StoredUser = {
   password: string;
 };
 
+type PendingRegistration = {
+  name: string;
+  email: string;
+  password: string;
+};
+
 const readUsers = (): StoredUser[] => {
   try {
     return JSON.parse(window.localStorage.getItem(authUsersKey) ?? "[]") as StoredUser[];
@@ -45,16 +52,39 @@ const writeUsers = (users: StoredUser[]) => {
 
 const toNameFromEmail = (email: string) => email.split("@")[0]?.replace(/[._-]+/g, " ") || "Google user";
 
+const AUTH_API_BASE_URL = `${runtime.apiBaseUrl}/api/auth`;
+
+const readAuthError = async (response: Response) => {
+  try {
+    const payload = (await response.json()) as { error?: string; message?: string };
+    return payload.error ?? payload.message ?? "Authentication request failed.";
+  } catch {
+    return "Authentication request failed.";
+  }
+};
+
 export function AuthPage({ initialMode = "login", error, onAuthenticated, onBackToLanding }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [pendingRegistration, setPendingRegistration] = useState<PendingRegistration | null>(null);
   const [notice, setNotice] = useState(error ?? "");
+  const [authLoading, setAuthLoading] = useState(false);
   const [resetReadyEmail, setResetReadyEmail] = useState("");
 
   const copy = useMemo(() => {
+    if (mode === "register" && pendingRegistration) {
+      return {
+        eyebrow: "Verify email",
+        title: "Enter your OTP code",
+        subtitle: `We sent a verification code to ${pendingRegistration.email}. Verify it to finish creating your account.`,
+        submit: "Verify and create account",
+      };
+    }
+
     switch (mode) {
       case "register":
         return {
@@ -85,7 +115,7 @@ export function AuthPage({ initialMode = "login", error, onAuthenticated, onBack
           submit: "Sign in",
         };
     }
-  }, [mode]);
+  }, [mode, pendingRegistration]);
 
   const createSession = (nextEmail: string, nextName: string, provider: AuthSession["provider"]) => {
     onAuthenticated({
@@ -116,13 +146,67 @@ export function AuthPage({ initialMode = "login", error, onAuthenticated, onBack
     createSession("google.operator@sk-crawlpulse.local", "Google Operator", "google");
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const requestOtp = async (registration: PendingRegistration) => {
+    const response = await fetch(`${AUTH_API_BASE_URL}/register/send-otp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: registration.name,
+        email: registration.email,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readAuthError(response));
+    }
+  };
+
+  const verifyOtp = async (registration: PendingRegistration, code: string) => {
+    const response = await fetch(`${AUTH_API_BASE_URL}/register/verify-otp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: registration.email,
+        otp: code,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readAuthError(response));
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setNotice("");
     const normalizedEmail = email.trim().toLowerCase();
     const users = readUsers();
 
     if (mode === "register") {
+      if (pendingRegistration) {
+        const normalizedOtp = otp.replace(/\D/g, "");
+        if (normalizedOtp.length !== 6) {
+          setNotice("Enter the 6-digit code sent to your email.");
+          return;
+        }
+
+        setAuthLoading(true);
+        try {
+          await verifyOtp(pendingRegistration, normalizedOtp);
+          writeUsers([...users, pendingRegistration]);
+          createSession(pendingRegistration.email, pendingRegistration.name, "password");
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "Could not verify the code.");
+        } finally {
+          setAuthLoading(false);
+        }
+        return;
+      }
+
       if (!name.trim() || !normalizedEmail || password.length < 8) {
         setNotice("Enter a name, valid email, and a password with at least 8 characters.");
         return;
@@ -136,8 +220,18 @@ export function AuthPage({ initialMode = "login", error, onAuthenticated, onBack
         return;
       }
 
-      writeUsers([...users, { name: name.trim(), email: normalizedEmail, password }]);
-      createSession(normalizedEmail, name.trim(), "password");
+      const registration = { name: name.trim(), email: normalizedEmail, password };
+      setAuthLoading(true);
+      try {
+        await requestOtp(registration);
+        setPendingRegistration(registration);
+        setOtp("");
+        setNotice("Verification code sent. Check your email and enter the OTP below.");
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : "Could not send verification code.");
+      } finally {
+        setAuthLoading(false);
+      }
       return;
     }
 
@@ -177,6 +271,29 @@ export function AuthPage({ initialMode = "login", error, onAuthenticated, onBack
     }
 
     createSession(match.email, match.name, "password");
+  };
+
+  const resendOtp = async () => {
+    if (!pendingRegistration) {
+      return;
+    }
+
+    setNotice("");
+    setAuthLoading(true);
+    try {
+      await requestOtp(pendingRegistration);
+      setNotice("A new verification code was sent.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not resend verification code.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const resetRegisterOtp = () => {
+    setPendingRegistration(null);
+    setOtp("");
+    setNotice("");
   };
 
   return (
@@ -248,26 +365,56 @@ export function AuthPage({ initialMode = "login", error, onAuthenticated, onBack
           </div>
 
           <form onSubmit={handleSubmit} className="grid gap-4">
-            {mode === "register" ? (
+            {mode === "register" && pendingRegistration ? (
+              <>
+                <label>
+                  <span className={labelClassName}>Email</span>
+                  <input className={inputClassName} type="email" value={pendingRegistration.email} readOnly />
+                </label>
+                <label>
+                  <span className={labelClassName}>Verification code</span>
+                  <input
+                    className={inputClassName}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="123456"
+                    autoComplete="one-time-code"
+                  />
+                </label>
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <button type="button" onClick={resendOtp} disabled={authLoading} className="font-semibold text-cyan-700 hover:text-cyan-900 disabled:cursor-not-allowed disabled:opacity-60">
+                    Resend code
+                  </button>
+                  <button type="button" onClick={resetRegisterOtp} disabled={authLoading} className="text-slate-500 hover:text-cyan-800 disabled:cursor-not-allowed disabled:opacity-60">
+                    Edit registration
+                  </button>
+                </div>
+              </>
+            ) : mode === "register" ? (
               <label>
                 <span className={labelClassName}>Full name</span>
                 <input className={inputClassName} value={name} onChange={(event) => setName(event.target.value)} placeholder="Sam Operator" autoComplete="name" />
               </label>
             ) : null}
 
-            <label>
-              <span className={labelClassName}>Email</span>
-              <input className={inputClassName} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" />
-            </label>
+            {mode === "register" && pendingRegistration ? null : (
+              <label>
+                <span className={labelClassName}>Email</span>
+                <input className={inputClassName} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" />
+              </label>
+            )}
 
-            {mode !== "forgot" ? (
+            {mode !== "forgot" && !(mode === "register" && pendingRegistration) ? (
               <label>
                 <span className={labelClassName}>{mode === "reset" ? "New password" : "Password"}</span>
                 <input className={inputClassName} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" autoComplete={mode === "login" ? "current-password" : "new-password"} />
               </label>
             ) : null}
 
-            {mode === "register" || mode === "reset" ? (
+            {(mode === "register" && !pendingRegistration) || mode === "reset" ? (
               <label>
                 <span className={labelClassName}>Confirm password</span>
                 <input className={inputClassName} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Repeat password" autoComplete="new-password" />
@@ -282,9 +429,10 @@ export function AuthPage({ initialMode = "login", error, onAuthenticated, onBack
 
             <button
               type="submit"
-              className="primary-cta min-h-[48px] rounded-[1rem] bg-[linear-gradient(135deg,#15616D,#26C6DA)] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_26px_rgba(21,97,109,0.22)] transition hover:brightness-105"
+              disabled={authLoading}
+              className="primary-cta min-h-[48px] rounded-[1rem] bg-[linear-gradient(135deg,#15616D,#26C6DA)] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_26px_rgba(21,97,109,0.22)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {copy.submit}
+              {authLoading ? "Please wait..." : copy.submit}
             </button>
           </form>
 
@@ -302,7 +450,14 @@ export function AuthPage({ initialMode = "login", error, onAuthenticated, onBack
                 </p>
               </>
             ) : (
-              <button type="button" onClick={() => setMode("login")} className="font-semibold text-cyan-700 hover:text-cyan-900">
+              <button
+                type="button"
+                onClick={() => {
+                  resetRegisterOtp();
+                  setMode("login");
+                }}
+                className="font-semibold text-cyan-700 hover:text-cyan-900"
+              >
                 Back to login
               </button>
             )}

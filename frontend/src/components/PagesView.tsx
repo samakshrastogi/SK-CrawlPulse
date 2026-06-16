@@ -18,7 +18,10 @@ type RouteTreeNode = {
 };
 
 export function PagesView({ result, filters }: PagesViewProps) {
-  const allPages = result?.frontend.pages ?? [];
+  const allPages = useMemo(
+    () => result?.frontend.pages ?? [],
+    [result?.frontend.pages],
+  );
   const [activeUrl, setActiveUrl] = useState("");
   const [query, setQuery] = useState("");
   const [expandedPanel, setExpandedPanel] = useState<null | "preview" | "html">(null);
@@ -72,7 +75,7 @@ export function PagesView({ result, filters }: PagesViewProps) {
 
   useEffect(() => {
     setActiveUrl(visiblePages[0]?.url ?? "");
-  }, [result?.runId, query, filters.route]);
+  }, [result?.runId, query, filters.route, visiblePages]);
 
   if (!activePage) {
     return (

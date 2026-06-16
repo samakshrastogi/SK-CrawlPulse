@@ -20,6 +20,7 @@ const tabs: Array<{ id: AppView; label: string; description: string }> = [
   { id: "report", label: "Report", description: "Handoff summary" },
   { id: "history", label: "History", description: "Previous runs" },
   { id: "compare", label: "Compare", description: "Run deltas" },
+  { id: "profile", label: "Profile", description: "User workspace" },
 ];
 
 export function ViewTabs({

@@ -313,4 +313,5 @@ export type AppView =
   | "tests"
   | "report"
   | "history"
-  | "compare";
+  | "compare"
+  | "profile";

@@ -10,7 +10,10 @@ type TestsViewProps = {
 
 export function TestsView({ result, filters }: TestsViewProps) {
   const apiBaseUrl = runtime.apiBaseUrl;
-  const allTests = result?.testCases ?? [];
+  const allTests = useMemo(
+    () => result?.testCases ?? [],
+    [result?.testCases],
+  );
   const [testIndex, setTestIndex] = useState(0);
 
   const tests = useMemo(
