@@ -49,7 +49,7 @@ const browserCandidates = [
 ].filter((value): value is string => Boolean(value));
 
 const resolveBrowserCandidates = async () => {
-  const configuredCandidates = Array.from(new Set(browserCandidates));
+  const configuredCandidates = Array.from(new Set([...browserCandidates, chromium.executablePath()]));
   const existingCandidates: string[] = [];
 
   for (const executablePath of configuredCandidates) {
