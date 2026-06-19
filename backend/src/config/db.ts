@@ -34,6 +34,7 @@ export const connectDB = async () => {
       minPoolSize: env.database.minPoolSize,
       serverSelectionTimeoutMS: env.database.serverSelectionTimeoutMs,
       socketTimeoutMS: env.database.socketTimeoutMs,
+      ...(env.secrets.mongoDbName ? { dbName: env.secrets.mongoDbName } : {}),
     });
 
     console.log("✅ MongoDB Connected");

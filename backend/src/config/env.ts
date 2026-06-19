@@ -1,6 +1,18 @@
+import path from "path";
 import dotenv from "dotenv";
 
-dotenv.config();
+const loadEnvironment = () => {
+  dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
+  if (process.env.NODE_ENV?.trim() === "production") {
+    dotenv.config({
+      path: path.resolve(process.cwd(), ".env.production"),
+      override: true,
+    });
+  }
+};
+
+loadEnvironment();
 
 const readString = (key: string): string => {
   const value = process.env[key]?.trim();
@@ -118,6 +130,7 @@ export const env = {
   },
   secrets: {
     mongoUri: readString("MONGO_URI"),
+    mongoDbName: readOptionalString("MONGO_DB_NAME"),
   },
   mail: {
     resendApiKey: readOptionalString("RESEND_API_KEY"),

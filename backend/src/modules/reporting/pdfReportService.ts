@@ -58,7 +58,7 @@ const resolveBrowserCandidates = async () => {
     }
   }
 
-  return [...existingCandidates, undefined];
+  return existingCandidates.length > 0 ? existingCandidates : [undefined];
 };
 
 const escapeHtml = (value: string | number | undefined | null) =>
@@ -822,6 +822,11 @@ const launchPdfBrowser = async () => {
       });
     } catch (error) {
       lastError = error;
+      console.warn(
+        `[pdf] Chromium launch failed${executablePath ? ` at ${executablePath}` : " with Playwright default executable"}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 

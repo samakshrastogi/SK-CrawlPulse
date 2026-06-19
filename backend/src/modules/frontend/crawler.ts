@@ -95,7 +95,7 @@ const resolveBrowserCandidates = async () => {
     }
   }
 
-  return [...existingCandidates, undefined];
+  return existingCandidates.length > 0 ? existingCandidates : [undefined];
 };
 
 const buildArtifactPublicUrl = (...segments: string[]) =>
@@ -262,6 +262,9 @@ const launchBrowser = async (headless: boolean) => {
       });
     } catch (error) {
       lastError = error;
+      console.warn(
+        `[browser] Chromium launch failed${executablePath ? ` at ${executablePath}` : " with Playwright default executable"}: ${formatCrawlerError(error)}`,
+      );
     }
   }
 
