@@ -5,10 +5,11 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run playwright:ensure && tsc -p tsconfig.json",
+    "playwright:ensure": "node scripts/ensure-playwright-browsers.js",
     "playwright:install": "playwright install chromium",
-    "postinstall": "playwright install chromium",
-    "start": "node dist/server.js"
+    "postinstall": "npm run playwright:ensure",
+    "start": "npm run playwright:ensure && node dist/server.js"
   },
   "keywords": [
     "qa",
