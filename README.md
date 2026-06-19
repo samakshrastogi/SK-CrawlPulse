@@ -256,6 +256,7 @@ The repository now includes example env files:
 Backend mail and notification support:
 
 - `RESEND_API_KEY`, `RESEND_API_ENDPOINT`, `RESEND_FROM_EMAIL`, and `RESEND_REPLY_TO_EMAIL` power server-side Resend delivery.
+- Production Resend sending must use the verified sender domain, for example `SK CrawlPulse <noreply@crawlpulse.sk-hub.in>`.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, and `SMTP_PASS` are available as a fallback delivery path.
 - `OTP_TTL_MINUTES` and `OTP_RESEND_SECONDS` control auth email verification timing.
 - `SLACK_WEBHOOK_URL` enables Slack webhook notifications.

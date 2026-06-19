@@ -84,6 +84,26 @@ const normalizeRoute = (value: string) => {
   return trimmed === "/" ? trimmed : trimmed.replace(/\/+$/, "");
 };
 
+const verifiedSenderEmail = "noreply@crawlpulse.sk-hub.in";
+const defaultFromEmail = `SK CrawlPulse <${verifiedSenderEmail}>`;
+const resendSandboxDomainPattern = /@resend\.dev\b/i;
+
+const normalizeFromEmail = (value: string | undefined) => {
+  if (!value || resendSandboxDomainPattern.test(value)) {
+    return defaultFromEmail;
+  }
+
+  return value;
+};
+
+const normalizeReplyToEmail = (value: string | undefined) => {
+  if (value && resendSandboxDomainPattern.test(value)) {
+    return verifiedSenderEmail;
+  }
+
+  return value;
+};
+
 export const env = {
   runtime: {
     port: readNumber("PORT"),
@@ -102,8 +122,8 @@ export const env = {
   mail: {
     resendApiKey: readOptionalString("RESEND_API_KEY"),
     resendEndpoint: readOptionalString("RESEND_API_ENDPOINT") ?? "https://api.resend.com/emails",
-    fromEmail: readOptionalString("RESEND_FROM_EMAIL") ?? "SK CrawlPulse <onboarding@resend.dev>",
-    replyToEmail: readOptionalString("RESEND_REPLY_TO_EMAIL"),
+    fromEmail: normalizeFromEmail(readOptionalString("RESEND_FROM_EMAIL")),
+    replyToEmail: normalizeReplyToEmail(readOptionalString("RESEND_REPLY_TO_EMAIL")),
     smtpHost: readOptionalString("SMTP_HOST"),
     smtpPort: readOptionalNumber("SMTP_PORT", 587),
     smtpSecure: readOptionalBoolean("SMTP_SECURE", false),
