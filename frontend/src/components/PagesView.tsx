@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { EmptyStatePanel } from "./EmptyStatePanel";
+import { runtime } from "../config/runtime";
+import { userScopedResourceUrl } from "../utils/userScopedUrl";
 import type { AnalysisResponse, GlobalFilters } from "../types/analysis";
 
 type PagesViewProps = {
   result: AnalysisResponse | null;
   filters: GlobalFilters;
+  userEmail: string;
 };
 
 type PageItem = AnalysisResponse["frontend"]["pages"][number];
@@ -17,7 +20,7 @@ type RouteTreeNode = {
   page?: PageItem;
 };
 
-export function PagesView({ result, filters }: PagesViewProps) {
+export function PagesView({ result, filters, userEmail }: PagesViewProps) {
   const allPages = useMemo(
     () => result?.frontend.pages ?? [],
     [result?.frontend.pages],
@@ -159,7 +162,7 @@ export function PagesView({ result, filters }: PagesViewProps) {
             </div>
             {activePage.previewImageUrl ? (
               <img
-                src={activePage.previewImageUrl}
+                src={userScopedResourceUrl(runtime.apiBaseUrl, activePage.previewImageUrl, userEmail)}
                 alt={activePage.title}
                 className="mt-4 h-[18rem] w-full rounded-2xl border border-white/10 object-cover"
               />
@@ -284,7 +287,7 @@ export function PagesView({ result, filters }: PagesViewProps) {
           {expandedPanel === "preview" ? (
             activePage.previewImageUrl ? (
               <img
-                src={activePage.previewImageUrl}
+                src={userScopedResourceUrl(runtime.apiBaseUrl, activePage.previewImageUrl, userEmail)}
                 alt={activePage.title}
                 className="max-h-[80vh] w-full rounded-2xl border border-white/10 object-contain"
               />

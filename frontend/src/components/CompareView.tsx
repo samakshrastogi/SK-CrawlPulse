@@ -1,17 +1,19 @@
 import { useMemo, useState } from "react";
 import { runtime } from "../config/runtime";
 import { EmptyStatePanel } from "./EmptyStatePanel";
+import { userScopedResourceUrl } from "../utils/userScopedUrl";
 import type { AnalysisRun } from "../types/analysis";
 
 type CompareViewProps = {
   availableRuns: AnalysisRun[];
   runs: AnalysisRun[];
   onCompareRuns: (runIds: string[]) => Promise<void>;
+  userEmail: string;
 };
 
 type DiffTab = "new" | "fixed" | "persistent";
 
-export function CompareView({ availableRuns, runs, onCompareRuns }: CompareViewProps) {
+export function CompareView({ availableRuns, runs, onCompareRuns, userEmail }: CompareViewProps) {
   const [tab, setTab] = useState<DiffTab>("new");
   const [baselineId, setBaselineId] = useState(runs[0]?.runId ?? "");
   const [comparisonId, setComparisonId] = useState(runs[1]?.runId ?? "");
@@ -154,7 +156,7 @@ export function CompareView({ availableRuns, runs, onCompareRuns }: CompareViewP
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             {[left, right].map((run, index) => (
-              <RunVisualCard key={run.runId} run={run} label={index === 0 ? "Baseline" : "Comparison"} />
+              <RunVisualCard key={run.runId} run={run} label={index === 0 ? "Baseline" : "Comparison"} userEmail={userEmail} />
             ))}
           </div>
 
@@ -233,8 +235,8 @@ export function CompareView({ availableRuns, runs, onCompareRuns }: CompareViewP
   );
 }
 
-function RunVisualCard({ run, label }: { run: AnalysisRun; label: string }) {
-  const snapshot = getRunSnapshot(run);
+function RunVisualCard({ run, label, userEmail }: { run: AnalysisRun; label: string; userEmail: string }) {
+  const snapshot = getRunSnapshot(run, userEmail);
 
   return (
     <article className="compare-run-shell overflow-hidden rounded-[1.8rem] border border-white/10 bg-slate-950/82">
@@ -274,13 +276,13 @@ function CompareMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getRunSnapshot(run: AnalysisRun) {
+function getRunSnapshot(run: AnalysisRun, userEmail: string) {
   const snapshotUrl =
     run.result?.frontend.pages.find((page) => page.previewImageUrl)?.previewImageUrl ??
     run.pages.find((page) => page.previewImageUrl)?.previewImageUrl ??
     run.artifacts?.find((artifact) => artifact.kind.includes("preview"))?.publicUrl;
 
-  return snapshotUrl ? `${runtime.apiBaseUrl}${snapshotUrl}` : "";
+  return userScopedResourceUrl(runtime.apiBaseUrl, snapshotUrl, userEmail);
 }
 
 function severityTone(severity: "low" | "medium" | "high") {

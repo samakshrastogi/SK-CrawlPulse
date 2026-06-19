@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { runtime } from "../config/runtime";
 import { EmptyStatePanel } from "./EmptyStatePanel";
+import { userScopedResourceUrl } from "../utils/userScopedUrl";
 import type { AnalysisResponse, GlobalFilters } from "../types/analysis";
 
 type TestsViewProps = {
   result: AnalysisResponse | null;
   filters: GlobalFilters;
+  userEmail: string;
 };
 
-export function TestsView({ result, filters }: TestsViewProps) {
+const appendEmailQuery = (url: string, email: string) =>
+  email ? `${url}${url.includes("?") ? "&" : "?"}email=${encodeURIComponent(email)}` : url;
+
+export function TestsView({ result, filters, userEmail }: TestsViewProps) {
   const apiBaseUrl = runtime.apiBaseUrl;
   const allTests = useMemo(
     () => result?.testCases ?? [],
@@ -114,7 +119,7 @@ export function TestsView({ result, filters }: TestsViewProps) {
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <a
-              href={`${exportBaseUrl}/playwright`}
+              href={appendEmailQuery(`${exportBaseUrl}/playwright`, userEmail)}
               className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100 hover:bg-cyan-400/15"
             >
               Export Playwright spec
@@ -282,7 +287,7 @@ export function TestsView({ result, filters }: TestsViewProps) {
             <div className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/70 p-5">
               <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Screenshot</p>
               <img
-                src={`${apiBaseUrl}${activeTest.screenshotUrl}`}
+                src={userScopedResourceUrl(apiBaseUrl, activeTest.screenshotUrl, userEmail)}
                 alt={activeTest.title}
                 className="mt-3 w-full rounded-2xl border border-white/10 object-cover shadow-[0_12px_35px_rgba(2,6,23,0.45)]"
               />
@@ -293,8 +298,8 @@ export function TestsView({ result, filters }: TestsViewProps) {
             <div className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/70 p-5">
               <p className="text-xs uppercase tracking-[0.25em] text-cyan-300">Diff</p>
               <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                <DiffFrame title="Before" imageUrl={activeTest.beforeScreenshotUrl ? `${apiBaseUrl}${activeTest.beforeScreenshotUrl}` : undefined} />
-                <DiffFrame title="After" imageUrl={activeTest.afterScreenshotUrl ? `${apiBaseUrl}${activeTest.afterScreenshotUrl}` : undefined} />
+                <DiffFrame title="Before" imageUrl={activeTest.beforeScreenshotUrl ? userScopedResourceUrl(apiBaseUrl, activeTest.beforeScreenshotUrl, userEmail) : undefined} />
+                <DiffFrame title="After" imageUrl={activeTest.afterScreenshotUrl ? userScopedResourceUrl(apiBaseUrl, activeTest.afterScreenshotUrl, userEmail) : undefined} />
               </div>
               {activeTest.domDiffSummary ? (
                 <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-200">

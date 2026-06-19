@@ -2,17 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { runtime } from "../config/runtime";
 import { getFindingMeta, getSeverityMeaning } from "../data/findingMeta";
 import { EmptyStatePanel } from "./EmptyStatePanel";
+import { userScopedResourceUrl } from "../utils/userScopedUrl";
 import type { AnalysisResponse, GlobalFilters } from "../types/analysis";
 
 type FindingsViewProps = {
   result: AnalysisResponse | null;
   filters: GlobalFilters;
+  userEmail: string;
 };
 
 type TriageStatus = "open" | "acknowledged" | "ignored" | "fixed";
 const TRIAGE_KEY_PREFIX = "sk-crawlpulse:finding-triage";
 
-export function FindingsView({ result, filters }: FindingsViewProps) {
+export function FindingsView({ result, filters, userEmail }: FindingsViewProps) {
   const [groupBy, setGroupBy] = useState<"priority" | "route" | "type">("priority");
   const [showGlossary, setShowGlossary] = useState(false);
   const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
@@ -241,7 +243,7 @@ export function FindingsView({ result, filters }: FindingsViewProps) {
                     <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-slate-50">
                       {finding.screenshotUrl ? (
                         <img
-                          src={`${apiBaseUrl}${finding.screenshotUrl}`}
+                          src={userScopedResourceUrl(apiBaseUrl, finding.screenshotUrl, userEmail)}
                           alt={finding.summary}
                           className="h-[168px] w-full object-cover"
                         />

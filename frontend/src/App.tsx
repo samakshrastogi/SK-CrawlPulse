@@ -31,6 +31,11 @@ const APP_STATE_KEY = "sk-crawlpulse:app-state";
 const AUTH_SESSION_KEY = "sk-crawlpulse:auth-session";
 const PENDING_LANDING_URL_KEY = "sk-crawlpulse:pending-landing-url";
 
+const toUserScope = (email: string) => email.trim().toLowerCase();
+
+const appendEmailQuery = (url: string, email: string) =>
+  `${url}${url.includes("?") ? "&" : "?"}email=${encodeURIComponent(email)}`;
+
 const createDefaultAnalysisOptions = (): AnalysisOptions => ({
   maxPages: DEFAULT_ANALYSIS_OPTIONS.maxPages,
   maxLinksPerPage: DEFAULT_ANALYSIS_OPTIONS.maxLinksPerPage,
@@ -184,6 +189,15 @@ export default function App() {
     globalFilters.issueType !== "all";
 
   const unreadNotifications = notifications.filter((notification) => !notification.readAt).length;
+  const userEmail = authSession?.email ? toUserScope(authSession.email) : "";
+  const scopedStorageKey = useCallback(
+    (key: string) => (userEmail ? `${key}:${userEmail}` : key),
+    [userEmail],
+  );
+  const scopedApiUrl = useCallback(
+    (url: string) => (userEmail ? appendEmailQuery(url, userEmail) : url),
+    [userEmail],
+  );
 
   const websiteOptions = Array.from(
     new Set(
@@ -210,8 +224,13 @@ export default function App() {
         null;
 
   const fetchHistory = useCallback(async (fallbackTargetUrl = "") => {
+    if (!userEmail) {
+      setHistoryRuns([]);
+      return;
+    }
+
     try {
-      const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs`);
+      const response = await fetch(scopedApiUrl(`${ANALYSIS_API_BASE_URL}/runs`));
       const runs = (await response.json()) as AnalysisRun[];
       if (response.ok) {
         setHistoryRuns(runs);
@@ -227,16 +246,20 @@ export default function App() {
     } catch {
       // Keep current history state.
     }
-  }, []);
+  }, [scopedApiUrl, userEmail]);
 
   const fetchRun = useCallback(async (runId: string) => {
-    const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${runId}`);
+    if (!userEmail) {
+      throw new Error("Sign in before opening a run");
+    }
+
+    const response = await fetch(scopedApiUrl(`${ANALYSIS_API_BASE_URL}/runs/${runId}`));
     const run = (await response.json()) as AnalysisRun;
     if (!response.ok) {
       throw new Error("Failed to fetch run");
     }
     return run;
-  }, []);
+  }, [scopedApiUrl, userEmail]);
 
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -277,6 +300,12 @@ export default function App() {
     window.localStorage.removeItem(AUTH_SESSION_KEY);
     streamRef.current?.close();
     streamRef.current = null;
+    setCurrentRun(null);
+    setHistoryRuns([]);
+    setComparisonRuns([]);
+    setNotifications([]);
+    setSavedProjects([]);
+    setResult(null);
   };
 
   const openAuth = (mode: typeof authMode) => {
@@ -302,18 +331,37 @@ export default function App() {
     document.documentElement.dataset.theme = "light";
 
     const restoreState = async () => {
-      const storedProjects = window.localStorage.getItem(SAVED_PROJECTS_KEY);
+      if (!userEmail) {
+        setSavedProjects([]);
+        setHistoryRuns([]);
+        setComparisonRuns([]);
+        setCurrentRun(null);
+        setResult(null);
+        setRestored(true);
+        return;
+      }
+
+      setRestored(false);
+      setSavedProjects([]);
+      setHistoryRuns([]);
+      setComparisonRuns([]);
+      setCurrentRun(null);
+      setResult(null);
+
+      const savedProjectsKey = scopedStorageKey(SAVED_PROJECTS_KEY);
+      const appStateKey = scopedStorageKey(APP_STATE_KEY);
+      const storedProjects = window.localStorage.getItem(savedProjectsKey);
       if (storedProjects) {
         try {
           setSavedProjects(JSON.parse(storedProjects) as SavedProject[]);
         } catch {
-          window.localStorage.removeItem(SAVED_PROJECTS_KEY);
+          window.localStorage.removeItem(savedProjectsKey);
         }
       }
 
       let restoredRunId: string | null = null;
       let restoredTargetUrl = "";
-      const storedState = window.localStorage.getItem(APP_STATE_KEY);
+      const storedState = window.localStorage.getItem(appStateKey);
       if (storedState) {
         try {
           const parsed = JSON.parse(storedState) as {
@@ -357,7 +405,7 @@ export default function App() {
           );
           restoredRunId = parsed.selectedRunId ?? null;
         } catch {
-          window.localStorage.removeItem(APP_STATE_KEY);
+          window.localStorage.removeItem(appStateKey);
         }
       }
 
@@ -381,11 +429,15 @@ export default function App() {
     void restoreState();
 
     return () => streamRef.current?.close();
-  }, [fetchHistory, fetchRun]);
+  }, [fetchHistory, fetchRun, scopedStorageKey, userEmail]);
 
   useEffect(() => {
-    window.localStorage.setItem(SAVED_PROJECTS_KEY, JSON.stringify(savedProjects));
-  }, [savedProjects]);
+    if (!userEmail) {
+      return;
+    }
+
+    window.localStorage.setItem(scopedStorageKey(SAVED_PROJECTS_KEY), JSON.stringify(savedProjects));
+  }, [savedProjects, scopedStorageKey, userEmail]);
 
   useEffect(() => {
     if (!authSession?.email) {
@@ -433,8 +485,12 @@ export default function App() {
       return;
     }
 
+    if (!userEmail) {
+      return;
+    }
+
     window.localStorage.setItem(
-      APP_STATE_KEY,
+      scopedStorageKey(APP_STATE_KEY),
       JSON.stringify({
         targetUrl,
         repoUrl,
@@ -452,8 +508,10 @@ export default function App() {
     globalFilters,
     repoUrl,
     restored,
+    scopedStorageKey,
     targetUrl,
     uploadedPath,
+    userEmail,
   ]);
 
   useEffect(() => {
@@ -467,7 +525,7 @@ export default function App() {
       return;
     }
 
-    const stream = new EventSource(`${ANALYSIS_API_BASE_URL}/runs/${currentRunId}/stream`);
+    const stream = new EventSource(scopedApiUrl(`${ANALYSIS_API_BASE_URL}/runs/${currentRunId}/stream`));
     streamRef.current = stream;
 
     stream.onmessage = (event) => {
@@ -492,7 +550,7 @@ export default function App() {
     };
 
     return () => stream.close();
-  }, [currentRun?.runId, currentRun?.status]);
+  }, [currentRun?.runId, currentRun?.status, scopedApiUrl]);
 
   const validateTargetUrl = (value: string) => {
     const trimmed = value.trim();
@@ -539,9 +597,17 @@ export default function App() {
   };
 
   const retryRun = async (runId: string) => {
+    if (!userEmail) {
+      throw new Error("Sign in before retrying a run");
+    }
+
     setLoading(true);
     const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${runId}/retry`, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: userEmail }),
     });
     const nextRun = (await response.json()) as AnalysisRun & { error?: string };
     if (!response.ok) {
@@ -644,6 +710,7 @@ export default function App() {
       case "run":
         return (
           <RunView
+            userEmail={userEmail}
             targetUrl={targetUrl}
             repoUrl={repoUrl}
             uploadedPath={uploadedPath}
@@ -666,18 +733,19 @@ export default function App() {
           />
         );
       case "pages":
-        return <PagesView result={filteredResult} filters={globalFilters} />;
+        return <PagesView result={filteredResult} filters={globalFilters} userEmail={userEmail} />;
       case "findings":
-        return <FindingsView result={filteredResult} filters={globalFilters} />;
+        return <FindingsView result={filteredResult} filters={globalFilters} userEmail={userEmail} />;
       case "tests":
-        return <TestsView result={filteredResult} filters={globalFilters} />;
+        return <TestsView result={filteredResult} filters={globalFilters} userEmail={userEmail} />;
       case "report":
-        return <ReportView result={filteredResult} currentRun={filteredCurrentRun} filters={globalFilters} />;
+        return <ReportView result={filteredResult} currentRun={filteredCurrentRun} filters={globalFilters} userEmail={userEmail} />;
       case "history":
         return (
           <HistoryView
             filters={globalFilters}
             runs={historyRuns}
+            userEmail={userEmail}
             onSelectRun={async (run) => {
               setError("");
               setLoading(true);
@@ -708,6 +776,7 @@ export default function App() {
           <CompareView
             availableRuns={historyRuns}
             runs={comparisonRuns}
+            userEmail={userEmail}
             onCompareRuns={async (runIds) => {
               const runs = await Promise.all(runIds.map((runId) => fetchRun(runId)));
               setComparisonRuns(runs);
@@ -884,6 +953,7 @@ export default function App() {
                   result={filteredResult}
                   onOpenFilters={activeView === "overview" ? () => setFilterModalOpen(true) : undefined}
                   hasActiveFilters={hasActiveFilters}
+                  userEmail={userEmail}
                 />
               ) : null}
 
@@ -908,7 +978,7 @@ export default function App() {
         onProfile={() => setActiveView("profile")}
       />
 
-      <AssistantPanel run={currentRun} historyRuns={historyRuns} savedProjects={savedProjects} />
+      <AssistantPanel run={currentRun} historyRuns={historyRuns} savedProjects={savedProjects} userEmail={userEmail} />
     </main>
   );
 }

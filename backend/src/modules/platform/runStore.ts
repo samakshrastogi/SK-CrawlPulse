@@ -20,6 +20,7 @@ import type {
 } from "../../types/platform";
 import { publishRunEvent } from "./runEvents";
 import { env } from "../../config/env";
+import { normalizeUserEmail } from "../../utils/userScope";
 
 type CreateRunInput = {
   runId: string;
@@ -101,6 +102,31 @@ const getTargetDomain = (request: AnalysisRequest) => {
   } catch {
     return request.targetUrl;
   }
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const getRunOwnerEmail = (request: AnalysisRequest) => {
+  const ownerEmail = normalizeUserEmail(request.operator?.email);
+  if (!ownerEmail) {
+    throw new Error("operator.email is required");
+  }
+
+  return ownerEmail;
+};
+
+const ownerScopeQuery = (ownerEmail: string) => {
+  const normalized = normalizeUserEmail(ownerEmail);
+  if (!normalized) {
+    throw new Error("valid user email is required");
+  }
+
+  return {
+    $or: [
+      { ownerEmail: normalized },
+      { "request.operator.email": new RegExp(`^${escapeRegExp(normalized)}$`, "i") },
+    ],
+  };
 };
 
 const truncateText = (value: string | undefined, max: number) => {
@@ -305,8 +331,10 @@ export const createAnalysisRun = async ({
   parentRunId,
   retryOfRunId,
 }: CreateRunInput): Promise<AnalysisRunView> => {
+  const ownerEmail = getRunOwnerEmail(request);
   const doc = await AnalysisRunModel.create({
     runId,
+    ownerEmail,
     status: "queued",
     targetDomain: getTargetDomain(request),
     parentRunId,
@@ -683,9 +711,9 @@ export const failAnalysisRun = async ({
   return view;
 };
 
-export const getAnalysisRun = async (runId: string): Promise<AnalysisRunView | null> => {
+export const getAnalysisRun = async (runId: string, ownerEmail?: string): Promise<AnalysisRunView | null> => {
   const doc = await withMongoRetry(`getAnalysisRun:${runId}`, () =>
-    AnalysisRunModel.findOne({ runId }).lean(),
+    AnalysisRunModel.findOne(ownerEmail ? { runId, ...ownerScopeQuery(ownerEmail) } : { runId }).lean(),
   );
   if (!doc) {
     return null;
@@ -778,9 +806,9 @@ export const appendAnalysisRunLogs = async ({
   );
 };
 
-export const listAnalysisRuns = async (): Promise<AnalysisRunView[]> => {
+export const listAnalysisRuns = async (ownerEmail: string): Promise<AnalysisRunView[]> => {
   const docs = await withMongoRetry("listAnalysisRuns", () =>
-    AnalysisRunModel.find().sort({ updatedAt: -1 }).limit(50).lean(),
+    AnalysisRunModel.find(ownerScopeQuery(ownerEmail)).sort({ updatedAt: -1 }).limit(50).lean(),
   );
   return docs.map(toListView);
 };

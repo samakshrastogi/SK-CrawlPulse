@@ -13,9 +13,10 @@ type AssistantPanelProps = {
   run: AnalysisRun | null;
   historyRuns: AnalysisRun[];
   savedProjects: SavedProject[];
+  userEmail: string;
 };
 
-export function AssistantPanel({ run, historyRuns, savedProjects }: AssistantPanelProps) {
+export function AssistantPanel({ run, historyRuns, savedProjects, userEmail }: AssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -63,7 +64,7 @@ export function AssistantPanel({ run, historyRuns, savedProjects }: AssistantPan
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ question: trimmed }),
+          body: JSON.stringify({ question: trimmed, email: userEmail }),
         },
       );
       const payload = (await response.json().catch(() => null)) as
@@ -265,7 +266,7 @@ export function AssistantPanel({ run, historyRuns, savedProjects }: AssistantPan
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({ question: trimmed, email: userEmail }),
       });
       const payload = (await response.json().catch(() => null)) as
         | { answer?: string; mode?: string; sources?: string[]; error?: string }

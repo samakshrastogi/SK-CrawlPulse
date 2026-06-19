@@ -7,6 +7,7 @@ type ReportViewProps = {
   result: AnalysisResponse | null;
   currentRun: AnalysisRun | null;
   filters: GlobalFilters;
+  userEmail: string;
 };
 
 type SectionKey = "summary" | "flow" | "backend" | "findings" | "performance" | "outline";
@@ -80,7 +81,10 @@ const EMPTY_RESULT: AnalysisResponse = {
   },
 };
 
-export function ReportView({ result, currentRun, filters }: ReportViewProps) {
+const appendEmailQuery = (url: string, email: string) =>
+  email ? `${url}${url.includes("?") ? "&" : "?"}email=${encodeURIComponent(email)}` : url;
+
+export function ReportView({ result, currentRun, filters, userEmail }: ReportViewProps) {
   const [section, setSection] = useState<SectionKey>("summary");
   const [showFlowchartSource, setShowFlowchartSource] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -155,6 +159,8 @@ export function ReportView({ result, currentRun, filters }: ReportViewProps) {
   });
   const qualityGate = buildQualityGate(result);
   const exportBaseUrl = `${runtime.apiBaseUrl}${runtime.analysisApiPath}/runs/${result.runId}/export`;
+  const exportUrl = (kind: "html" | "json" | "playwright" | "pdf") =>
+    appendEmailQuery(`${exportBaseUrl}/${kind}`, userEmail);
   const canDownloadPdf = currentRun?.status === "completed" && Boolean(result.runId);
 
   const downloadPdfReport = async () => {
@@ -165,7 +171,7 @@ export function ReportView({ result, currentRun, filters }: ReportViewProps) {
     setPdfLoading(true);
     setPdfError("");
     try {
-      const response = await fetch(`${exportBaseUrl}/pdf`);
+      const response = await fetch(exportUrl("pdf"));
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(payload?.error ?? "Report generation failed.");
@@ -197,9 +203,9 @@ export function ReportView({ result, currentRun, filters }: ReportViewProps) {
               <h2 className="mt-3 break-words text-2xl font-semibold text-white">Interpreted scan report</h2>
             </div>
             <div className="flex flex-wrap gap-2">
-              <ExportButton href={`${exportBaseUrl}/html`} label="HTML report" />
-              <ExportButton href={`${exportBaseUrl}/json`} label="JSON package" />
-              <ExportButton href={`${exportBaseUrl}/playwright`} label="Playwright spec" />
+              <ExportButton href={exportUrl("html")} label="HTML report" />
+              <ExportButton href={exportUrl("json")} label="JSON package" />
+              <ExportButton href={exportUrl("playwright")} label="Playwright spec" />
             </div>
           </div>
           <p className="mt-3 max-w-4xl break-words text-sm leading-7 text-slate-300">{executiveSummary}</p>

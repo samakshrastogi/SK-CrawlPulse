@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request } from "express";
 import { HttpError } from "../lib/HttpError";
 import {
   continueAnalysisCheckpoint,
@@ -17,8 +18,21 @@ import {
 import { generateProfessionalPdfReport } from "../modules/reporting/pdfReportService";
 import { answerRunQuestion } from "../modules/chat/chatAssistant";
 import type { AnalysisRequest, LoginPromptAction } from "../types/platform";
+import { normalizeUserEmail } from "../utils/userScope";
 
 export const analysisRouter = Router();
+
+const getRequestEmail = (req: Request) =>
+  normalizeUserEmail(req.body?.email ?? req.query.email ?? req.headers["x-user-email"]);
+
+const requireRequestEmail = (req: Request) => {
+  const email = getRequestEmail(req);
+  if (!email) {
+    throw new HttpError(401, "A valid user email is required");
+  }
+
+  return email;
+};
 
 analysisRouter.post("/run", async (req, res, next) => {
   try {
@@ -28,7 +42,18 @@ analysisRouter.post("/run", async (req, res, next) => {
       throw new HttpError(400, "targetUrl is required");
     }
 
-    const result = await startPlatformAnalysis(payload);
+    const ownerEmail = normalizeUserEmail(payload.operator?.email);
+    if (!ownerEmail) {
+      throw new HttpError(401, "operator.email is required");
+    }
+
+    const result = await startPlatformAnalysis({
+      ...payload,
+      operator: {
+        ...payload.operator,
+        email: ownerEmail,
+      },
+    });
     res.status(202).json(result);
   } catch (error) {
     next(error);
@@ -37,7 +62,8 @@ analysisRouter.post("/run", async (req, res, next) => {
 
 analysisRouter.get("/runs/:runId/stream", async (req, res, next) => {
   try {
-    const started = await streamPlatformAnalysisRun(req.params.runId, res);
+    const ownerEmail = requireRequestEmail(req);
+    const started = await streamPlatformAnalysisRun(req.params.runId, ownerEmail, res);
     if (!started) {
       throw new HttpError(404, "run not found");
     }
@@ -48,10 +74,11 @@ analysisRouter.get("/runs/:runId/stream", async (req, res, next) => {
 
 analysisRouter.post("/runs/:runId/checkpoint/continue", async (req, res, next) => {
   try {
+    const ownerEmail = requireRequestEmail(req);
     const requestedAction = req.body?.action;
     const action: LoginPromptAction =
       requestedAction === "continue_without_login" ? "continue_without_login" : "continue_after_login";
-    const resumed = await continueAnalysisCheckpoint(req.params.runId, action);
+    const resumed = await continueAnalysisCheckpoint(req.params.runId, ownerEmail, action);
     if (!resumed) {
       throw new HttpError(409, "checkpoint is not waiting");
     }
@@ -64,7 +91,8 @@ analysisRouter.post("/runs/:runId/checkpoint/continue", async (req, res, next) =
 
 analysisRouter.post("/runs/:runId/checkpoint/login-run", async (req, res, next) => {
   try {
-    const result = await startLoginSessionAnalysis(req.params.runId);
+    const ownerEmail = requireRequestEmail(req);
+    const result = await startLoginSessionAnalysis(req.params.runId, ownerEmail);
     res.status(202).json(result);
   } catch (error) {
     next(error);
@@ -73,7 +101,8 @@ analysisRouter.post("/runs/:runId/checkpoint/login-run", async (req, res, next) 
 
 analysisRouter.post("/runs/:runId/retry", async (req, res, next) => {
   try {
-    const result = await retryPlatformAnalysis(req.params.runId);
+    const ownerEmail = requireRequestEmail(req);
+    const result = await retryPlatformAnalysis(req.params.runId, ownerEmail);
     res.status(202).json(result);
   } catch (error) {
     next(error);
@@ -82,7 +111,8 @@ analysisRouter.post("/runs/:runId/retry", async (req, res, next) => {
 
 analysisRouter.get("/runs/:runId", async (req, res, next) => {
   try {
-    const result = await getPlatformAnalysisRun(req.params.runId);
+    const ownerEmail = requireRequestEmail(req);
+    const result = await getPlatformAnalysisRun(req.params.runId, ownerEmail);
     if (!result) {
       throw new HttpError(404, "run not found");
     }
@@ -95,7 +125,8 @@ analysisRouter.get("/runs/:runId", async (req, res, next) => {
 
 analysisRouter.post("/runs/:runId/chat", async (req, res, next) => {
   try {
-    const run = await getPlatformAnalysisRun(req.params.runId);
+    const ownerEmail = requireRequestEmail(req);
+    const run = await getPlatformAnalysisRun(req.params.runId, ownerEmail);
     if (!run) {
       throw new HttpError(404, "run not found");
     }
@@ -108,7 +139,8 @@ analysisRouter.post("/runs/:runId/chat", async (req, res, next) => {
 
 analysisRouter.get("/runs/:runId/export/html", async (req, res, next) => {
   try {
-    const run = await getPlatformAnalysisRun(req.params.runId);
+    const ownerEmail = requireRequestEmail(req);
+    const run = await getPlatformAnalysisRun(req.params.runId, ownerEmail);
     if (!run) {
       throw new HttpError(404, "run not found");
     }
@@ -123,7 +155,8 @@ analysisRouter.get("/runs/:runId/export/html", async (req, res, next) => {
 
 analysisRouter.get("/runs/:runId/export/json", async (req, res, next) => {
   try {
-    const run = await getPlatformAnalysisRun(req.params.runId);
+    const ownerEmail = requireRequestEmail(req);
+    const run = await getPlatformAnalysisRun(req.params.runId, ownerEmail);
     if (!run) {
       throw new HttpError(404, "run not found");
     }
@@ -138,7 +171,8 @@ analysisRouter.get("/runs/:runId/export/json", async (req, res, next) => {
 
 analysisRouter.get("/runs/:runId/export/playwright", async (req, res, next) => {
   try {
-    const run = await getPlatformAnalysisRun(req.params.runId);
+    const ownerEmail = requireRequestEmail(req);
+    const run = await getPlatformAnalysisRun(req.params.runId, ownerEmail);
     if (!run) {
       throw new HttpError(404, "run not found");
     }
@@ -153,7 +187,8 @@ analysisRouter.get("/runs/:runId/export/playwright", async (req, res, next) => {
 
 analysisRouter.get("/runs/:runId/export/pdf", async (req, res, next) => {
   try {
-    const run = await getPlatformAnalysisRun(req.params.runId);
+    const ownerEmail = requireRequestEmail(req);
+    const run = await getPlatformAnalysisRun(req.params.runId, ownerEmail);
     if (!run) {
       throw new HttpError(404, "run not found");
     }
@@ -169,9 +204,10 @@ analysisRouter.get("/runs/:runId/export/pdf", async (req, res, next) => {
   }
 });
 
-analysisRouter.get("/runs", async (_req, res, next) => {
+analysisRouter.get("/runs", async (req, res, next) => {
   try {
-    const result = await listPlatformAnalysisRuns();
+    const ownerEmail = requireRequestEmail(req);
+    const result = await listPlatformAnalysisRuns(ownerEmail);
     res.status(200).json(result);
   } catch (error) {
     next(error);

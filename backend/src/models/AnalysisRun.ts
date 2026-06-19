@@ -3,6 +3,7 @@ import mongoose, { Schema } from "mongoose";
 const analysisRunSchema = new Schema(
   {
     runId: { type: String, required: true, unique: true, index: true },
+    ownerEmail: { type: String, index: true },
     status: { type: String, required: true, index: true },
     targetDomain: { type: String, required: true, index: true },
     request: { type: Schema.Types.Mixed, required: true },
@@ -24,6 +25,8 @@ const analysisRunSchema = new Schema(
 );
 
 analysisRunSchema.index({ status: 1, updatedAt: -1 });
+analysisRunSchema.index({ ownerEmail: 1, updatedAt: -1 });
+analysisRunSchema.index({ ownerEmail: 1, status: 1, updatedAt: -1 });
 analysisRunSchema.index({ targetDomain: 1, updatedAt: -1 });
 analysisRunSchema.index({ targetDomain: 1, status: 1, updatedAt: -1 });
 analysisRunSchema.index({ retryOfRunId: 1, updatedAt: -1 });

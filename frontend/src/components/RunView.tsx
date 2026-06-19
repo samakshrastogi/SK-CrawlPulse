@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { runtime } from "../config/runtime";
 import { AnalysisForm } from "./AnalysisForm";
+import { userScopedResourceUrl } from "../utils/userScopedUrl";
 import type { AnalysisOptions, AnalysisResponse, AnalysisRun, SavedProject } from "../types/analysis";
 
 type MetricSnapshot = {
@@ -35,6 +36,7 @@ type RunSummaryStrip = {
 };
 
 type RunViewProps = {
+  userEmail: string;
   targetUrl: string;
   repoUrl: string;
   uploadedPath: string;
@@ -57,13 +59,13 @@ const API_BASE_URL = runtime.apiBaseUrl;
 const ANALYSIS_API_BASE_URL = `${runtime.apiBaseUrl}${runtime.analysisApiPath}`;
 type CheckpointAction = "continue_without_login" | "continue_after_login";
 
-const continueCheckpointRun = async (runId: string, action: CheckpointAction) => {
+const continueCheckpointRun = async (runId: string, userEmail: string, action: CheckpointAction) => {
   const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${runId}/checkpoint/continue`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, email: userEmail }),
   });
 
   if (!response.ok) {
@@ -72,9 +74,13 @@ const continueCheckpointRun = async (runId: string, action: CheckpointAction) =>
   }
 };
 
-const startLoginSessionRun = async (runId: string) => {
+const startLoginSessionRun = async (runId: string, userEmail: string) => {
   const response = await fetch(`${ANALYSIS_API_BASE_URL}/runs/${runId}/checkpoint/login-run`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email: userEmail }),
   });
   const nextRun = (await response.json()) as AnalysisRun & { error?: string };
   if (!response.ok) {
@@ -85,6 +91,7 @@ const startLoginSessionRun = async (runId: string) => {
 };
 
 export function RunView({
+  userEmail,
   currentRun,
   onRetryRun,
   onReplaceRun,
@@ -174,7 +181,7 @@ export function RunView({
 
     if (Date.now() >= fallbackAt) {
       setLoginDecisionHandled(currentRun.runId);
-      void continueCheckpointRun(currentRun.runId, "continue_without_login").catch(() => {
+      void continueCheckpointRun(currentRun.runId, userEmail, "continue_without_login").catch(() => {
         setLoginDecisionHandled(null);
       });
       return;
@@ -182,13 +189,13 @@ export function RunView({
 
     const timeout = window.setTimeout(() => {
       setLoginDecisionHandled(currentRun.runId);
-      void continueCheckpointRun(currentRun.runId, "continue_without_login").catch(() => {
+      void continueCheckpointRun(currentRun.runId, userEmail, "continue_without_login").catch(() => {
         setLoginDecisionHandled(null);
       });
     }, fallbackAt - Date.now());
 
     return () => window.clearTimeout(timeout);
-  }, [currentRun, loginDecisionHandled]);
+  }, [currentRun, loginDecisionHandled, userEmail]);
 
   useEffect(() => {
     if (!currentRun?.error) {
@@ -224,10 +231,10 @@ export function RunView({
             setLoginDecisionHandled(currentRun.runId);
             try {
               if (action === "continue_after_login") {
-                onReplaceRun(await startLoginSessionRun(currentRun.runId));
+                onReplaceRun(await startLoginSessionRun(currentRun.runId, userEmail));
                 return;
               }
-              await continueCheckpointRun(currentRun.runId, action);
+              await continueCheckpointRun(currentRun.runId, userEmail, action);
             } catch {
               setLoginDecisionHandled(null);
             }
@@ -294,7 +301,7 @@ export function RunView({
             <div className="mt-1.5 min-h-0 flex-1 overflow-hidden rounded-[0.75rem] border border-white/10 bg-slate-950/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
               {heroPreview?.previewImageUrl ? (
                 <img
-                  src={`${API_BASE_URL}${heroPreview.previewImageUrl}`}
+                  src={userScopedResourceUrl(API_BASE_URL, heroPreview.previewImageUrl, userEmail)}
                   alt={heroPreview.title}
                   className="h-full w-full object-contain bg-white"
                 />
@@ -321,6 +328,7 @@ export function RunView({
         remainingSeconds={remainingSeconds}
         onRetryRun={onRetryRun}
         onReplaceRun={onReplaceRun}
+        userEmail={userEmail}
       />
     </section>
     {previewModalOpen ? (
@@ -329,6 +337,7 @@ export function RunView({
         preview={heroPreview}
         pagesFound={currentRun?.progress.pagesDiscovered ?? currentRun?.pages.length ?? 0}
         currentRoute={heroPreview?.url ? routeFromUrl(heroPreview.url) : currentRun?.progress.currentPageUrl ? routeFromUrl(currentRun.progress.currentPageUrl) : "--"}
+        userEmail={userEmail}
         onClose={() => setPreviewModalOpen(false)}
       />
     ) : null}
@@ -342,12 +351,14 @@ function RunTracker({
   remainingSeconds,
   onRetryRun,
   onReplaceRun,
+  userEmail,
 }: {
   run: AnalysisRun | null;
   elapsedSeconds: number;
   remainingSeconds: number | null;
   onRetryRun: (runId: string) => Promise<void>;
   onReplaceRun: (run: AnalysisRun) => void;
+  userEmail: string;
 }) {
   const [checkpointLoading, setCheckpointLoading] = useState(false);
   const [retryLoading, setRetryLoading] = useState(false);
@@ -473,11 +484,11 @@ function RunTracker({
     try {
       setCheckpointLoading(true);
       if (run.progress.checkpoint?.kind === "login_choice" && action === "continue_after_login") {
-        onReplaceRun(await startLoginSessionRun(run.runId));
+        onReplaceRun(await startLoginSessionRun(run.runId, userEmail));
         return;
       }
 
-      await continueCheckpointRun(run.runId, action);
+      await continueCheckpointRun(run.runId, userEmail, action);
     } finally {
       setCheckpointLoading(false);
     }
@@ -914,6 +925,7 @@ function PreviewPane({
   preview,
   pagesFound,
   currentRoute,
+  userEmail,
   layout = "stack",
 }: {
   run: AnalysisRun | null;
@@ -930,6 +942,7 @@ function PreviewPane({
     | null;
   pagesFound: number;
   currentRoute: string;
+  userEmail: string;
   layout?: "stack" | "row";
 }) {
   const [previewMode, setPreviewMode] = useState<"visual" | "html">(
@@ -1042,7 +1055,7 @@ function PreviewPane({
             />
           ) : canShowVisual ? (
             <img
-              src={`${API_BASE_URL}${preview.previewImageUrl}`}
+              src={userScopedResourceUrl(API_BASE_URL, preview.previewImageUrl, userEmail)}
               alt={preview.title}
               className="h-full w-full object-contain bg-white"
             />
@@ -1066,6 +1079,7 @@ function PreviewModal({
   preview,
   pagesFound,
   currentRoute,
+  userEmail,
   onClose,
 }: {
   run: AnalysisRun | null;
@@ -1082,6 +1096,7 @@ function PreviewModal({
     | null;
   pagesFound: number;
   currentRoute: string;
+  userEmail: string;
   onClose: () => void;
 }) {
   const modal = (
@@ -1102,7 +1117,7 @@ function PreviewModal({
         </div>
 
         <div className="mt-3 min-h-0 flex-1">
-          <PreviewPane run={run} preview={preview} pagesFound={pagesFound} currentRoute={currentRoute} layout="row" />
+          <PreviewPane run={run} preview={preview} pagesFound={pagesFound} currentRoute={currentRoute} userEmail={userEmail} layout="row" />
         </div>
       </div>
     </div>

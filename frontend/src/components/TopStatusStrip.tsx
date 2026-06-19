@@ -1,4 +1,5 @@
 import { runtime } from "../config/runtime";
+import { userScopedResourceUrl } from "../utils/userScopedUrl";
 import type { AnalysisResponse, AnalysisRun, AppView } from "../types/analysis";
 
 type TopStatusStripProps = {
@@ -7,6 +8,7 @@ type TopStatusStripProps = {
   result: AnalysisResponse | null;
   onOpenFilters?: () => void;
   hasActiveFilters?: boolean;
+  userEmail: string;
 };
 
 export function TopStatusStrip({
@@ -15,6 +17,7 @@ export function TopStatusStrip({
   result,
   onOpenFilters,
   hasActiveFilters,
+  userEmail,
 }: TopStatusStripProps) {
   const runPreview =
     currentRun?.progress.liveSession ??
@@ -74,7 +77,7 @@ export function TopStatusStrip({
                 {runPreview ? (
                   runPreview.previewImageUrl ? (
                     <img
-                      src={`${runtime.apiBaseUrl}${runPreview.previewImageUrl}`}
+                      src={userScopedResourceUrl(runtime.apiBaseUrl, runPreview.previewImageUrl, userEmail)}
                       alt={runPreview.title}
                       className="h-[220px] w-full object-contain bg-white"
                     />

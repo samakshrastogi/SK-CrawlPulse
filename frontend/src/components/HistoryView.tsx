@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
 import { runtime } from "../config/runtime";
+import { userScopedResourceUrl } from "../utils/userScopedUrl";
 import type { AnalysisRun, GlobalFilters } from "../types/analysis";
 
 type HistoryViewProps = {
   runs: AnalysisRun[];
   filters: GlobalFilters;
   onSelectRun: (run: AnalysisRun) => void;
+  userEmail: string;
 };
 
-export function HistoryView({ runs, filters, onSelectRun }: HistoryViewProps) {
+export function HistoryView({ runs, filters, onSelectRun, userEmail }: HistoryViewProps) {
   const [query, setQuery] = useState("");
   const websiteOptions = useMemo(() => Array.from(new Set(runs.map((run) => toDomain(run.request.targetUrl)))), [runs]);
 
@@ -84,7 +86,7 @@ export function HistoryView({ runs, filters, onSelectRun }: HistoryViewProps) {
             const domainRuns = runsByDomain.get(domain) ?? [run];
             const domainIndex = domainRuns.findIndex((item) => item.runId === run.runId);
             const previousRun = domainIndex > 0 ? domainRuns[domainIndex - 1] : null;
-            const snapshot = getRunSnapshot(run);
+            const snapshot = getRunSnapshot(run, userEmail);
             const pageCount = run.result?.frontend.pages.length ?? run.progress.pagesDiscovered ?? 0;
             const findings = run.result?.frontend.runtimeFindings ?? [];
             const severityCounts = countFindingsBySeverity(findings);
@@ -473,13 +475,13 @@ function faviconForDomain(domain: string) {
   return `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(domain)}`;
 }
 
-function getRunSnapshot(run: AnalysisRun) {
+function getRunSnapshot(run: AnalysisRun, userEmail: string) {
   const snapshotUrl =
     run.result?.frontend.pages.find((page) => page.previewImageUrl)?.previewImageUrl ??
     run.pages.find((page) => page.previewImageUrl)?.previewImageUrl ??
     run.artifacts?.find((artifact) => artifact.kind.includes("preview"))?.publicUrl;
 
-  return snapshotUrl ? `${runtime.apiBaseUrl}${snapshotUrl}` : "";
+  return userScopedResourceUrl(runtime.apiBaseUrl, snapshotUrl, userEmail);
 }
 
 function toDomain(value: string) {

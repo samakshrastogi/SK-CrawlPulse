@@ -438,8 +438,8 @@ const mergeResumedFrontend = ({
   };
 };
 
-export const retryPlatformAnalysis = async (runId: string): Promise<AnalysisRunView> => {
-  const originalRun = await getAnalysisRun(runId);
+export const retryPlatformAnalysis = async (runId: string, ownerEmail: string): Promise<AnalysisRunView> => {
+  const originalRun = await getAnalysisRun(runId, ownerEmail);
   if (!originalRun) {
     throw new Error("run not found");
   }
@@ -476,8 +476,8 @@ export const retryPlatformAnalysis = async (runId: string): Promise<AnalysisRunV
   return run;
 };
 
-export const startLoginSessionAnalysis = async (runId: string): Promise<AnalysisRunView> => {
-  const originalRun = await getAnalysisRun(runId);
+export const startLoginSessionAnalysis = async (runId: string, ownerEmail: string): Promise<AnalysisRunView> => {
+  const originalRun = await getAnalysisRun(runId, ownerEmail);
   if (!originalRun) {
     throw new Error("run not found");
   }
@@ -535,8 +535,8 @@ export const startLoginSessionAnalysis = async (runId: string): Promise<Analysis
   return loginRun;
 };
 
-export const getPlatformAnalysisRun = async (runId: string) => getAnalysisRun(runId);
-export const listPlatformAnalysisRuns = async () => listAnalysisRuns();
+export const getPlatformAnalysisRun = async (runId: string, ownerEmail: string) => getAnalysisRun(runId, ownerEmail);
+export const listPlatformAnalysisRuns = async (ownerEmail: string) => listAnalysisRuns(ownerEmail);
 
 const logRun = async (
   runId: string,
@@ -767,8 +767,6 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
             buffer.snapshot.progress.pagesDiscovered ?? 0,
             buffer.snapshot.pages.length,
           );
-          publishBufferedSnapshot(runId);
-          scheduleRunBufferFlush(runId);
           if (page.previewImageUrl) {
             await persistAnalysisArtifact({
               runId,
@@ -778,6 +776,8 @@ const executePlatformAnalysis = async (run: AnalysisRunView) => {
               relatedPageUrl: page.url,
             });
           }
+          publishBufferedSnapshot(runId);
+          scheduleRunBufferFlush(runId);
           await logRun(runId, "crawl", `page ${page.routePath} stored`);
         },
         onInteraction: async (interaction) => {
@@ -1236,8 +1236,14 @@ export const initializeAnalysisWorker = () => {
 
 export const continueAnalysisCheckpoint = async (
   runId: string,
+  ownerEmail: string,
   action: LoginPromptAction = "continue_after_login",
 ) => {
+  const run = await getAnalysisRun(runId, ownerEmail);
+  if (!run) {
+    return false;
+  }
+
   const waiter = checkpointWaiters.get(runId);
   if (!waiter) {
     return false;
@@ -1248,8 +1254,8 @@ export const continueAnalysisCheckpoint = async (
   return true;
 };
 
-export const streamPlatformAnalysisRun = async (runId: string, res: Response) => {
-  const snapshot = await getAnalysisRun(runId);
+export const streamPlatformAnalysisRun = async (runId: string, ownerEmail: string, res: Response) => {
+  const snapshot = await getAnalysisRun(runId, ownerEmail);
   if (!snapshot) {
     return false;
   }

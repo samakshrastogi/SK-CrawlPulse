@@ -1,8 +1,8 @@
-import path from "path";
 import cors from "cors";
 import express from "express";
 import { env } from "./config/env";
 import { analysisRouter } from "./routes/analysis";
+import { artifactRouter } from "./routes/artifacts";
 import { authRouter } from "./routes/auth";
 import { notificationRouter } from "./routes/notifications";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
@@ -37,7 +37,7 @@ app.use(
   }),
 );
 app.use(express.json({ limit: env.runtime.jsonBodyLimit }));
-app.use(env.runtime.artifactsPublicRoute, express.static(path.resolve(process.cwd(), env.runtime.artifactsDir)));
+app.use(env.runtime.artifactsPublicRoute, artifactRouter);
 
 app.get("/health", (_req, res) => {
   res.json({
