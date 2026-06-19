@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc -p tsconfig.json",
+    "playwright:install": "playwright install chromium",
+    "postinstall": "playwright install chromium",
     "start": "node dist/server.js"
   },
   "keywords": [
