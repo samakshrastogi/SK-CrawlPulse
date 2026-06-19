@@ -1460,8 +1460,8 @@ body,
 @media (min-width: 1024px) {
   .dashboard-shell {
     --dashboard-x-padding: 1.5rem;
-    --dashboard-topbar-offset: 1.5rem;
-    --dashboard-topbar-height: 5.4rem;
+    --dashboard-topbar-offset: 1rem;
+    --dashboard-topbar-height: 3.4rem;
     --dashboard-sidebar-width: 280px;
     --dashboard-shell-edge: max(
       var(--dashboard-x-padding),
@@ -1470,7 +1470,7 @@ body,
   }
 
   .dashboard-container {
-    padding-top: calc(var(--dashboard-topbar-offset) + var(--dashboard-topbar-height) + 1.25rem) !important;
+    padding-top: calc(var(--dashboard-topbar-offset) + var(--dashboard-topbar-height) + 0.9rem) !important;
   }
 
   .dashboard-shell::before {
@@ -1478,7 +1478,7 @@ body,
     position: fixed;
     inset: 0 0 auto 0;
     z-index: 55;
-    height: calc(var(--dashboard-topbar-offset) + var(--dashboard-topbar-height) + 1rem);
+    height: calc(var(--dashboard-topbar-offset) + var(--dashboard-topbar-height) + 0.75rem);
     pointer-events: none;
     background:
       linear-gradient(125deg, #F7FAFC 0%, #ECFEFF 30%, #F5F3FF 66%, #FFF7ED 100%),
@@ -1512,11 +1512,11 @@ body,
 
   .workspace-sidebar {
     position: fixed !important;
-    top: calc(var(--dashboard-topbar-offset) + var(--dashboard-topbar-height) + 1.25rem);
+    top: calc(var(--dashboard-topbar-offset) + var(--dashboard-topbar-height) + 0.9rem);
     left: var(--dashboard-shell-edge);
     z-index: 50;
     width: var(--dashboard-sidebar-width);
-    max-height: calc(100vh - var(--dashboard-topbar-offset) - var(--dashboard-topbar-height) - 2.25rem);
+    max-height: calc(100vh - var(--dashboard-topbar-offset) - var(--dashboard-topbar-height) - 1.8rem);
     overflow-y: auto;
   }
 
@@ -1526,7 +1526,7 @@ body,
   }
 
   .run-sticky-console {
-    top: calc(var(--dashboard-topbar-offset) + var(--dashboard-topbar-height) + 1rem) !important;
+    top: calc(var(--dashboard-topbar-offset) + var(--dashboard-topbar-height) + 0.75rem) !important;
   }
 }
 

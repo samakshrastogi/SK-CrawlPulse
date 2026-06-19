@@ -1,4 +1,4 @@
-import { mkdir } from "fs/promises";
+import { access, mkdir } from "fs/promises";
 import path from "path";
 import { chromium, type BrowserContext, type BrowserContextOptions, type Page } from "playwright";
 import { env } from "../../config/env";
@@ -84,6 +84,19 @@ const browserCandidates = [
   env.crawler.browserExecutablePath,
   ...env.crawler.browserFallbackExecutablePaths,
 ].filter((candidate): candidate is string => Boolean(candidate));
+
+const resolveBrowserCandidates = async () => {
+  const configuredCandidates = Array.from(new Set(browserCandidates));
+  const existingCandidates: string[] = [];
+
+  for (const executablePath of configuredCandidates) {
+    if (await access(executablePath).then(() => true).catch(() => false)) {
+      existingCandidates.push(executablePath);
+    }
+  }
+
+  return [...existingCandidates, undefined];
+};
 
 const buildArtifactPublicUrl = (...segments: string[]) =>
   `${env.runtime.artifactsPublicRoute}/${segments.map((segment) => segment.replace(/^\/+|\/+$/g, "")).join("/")}`;
@@ -230,7 +243,7 @@ const gotoStable = async (page: Page, url: string, timeoutMs = env.crawler.timeo
 };
 
 const launchBrowser = async (headless: boolean) => {
-  const candidates = browserCandidates.length > 0 ? browserCandidates : [undefined];
+  const candidates = await resolveBrowserCandidates();
   let lastError: unknown;
 
   for (const executablePath of candidates) {
@@ -242,6 +255,7 @@ const launchBrowser = async (headless: boolean) => {
         args: [
           "--disable-blink-features=AutomationControlled",
           "--disable-dev-shm-usage",
+          "--no-sandbox",
           "--no-default-browser-check",
           "--disable-infobars",
         ],

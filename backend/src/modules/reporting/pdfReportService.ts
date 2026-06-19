@@ -48,6 +48,19 @@ const browserCandidates = [
   ...env.crawler.browserFallbackExecutablePaths,
 ].filter((value): value is string => Boolean(value));
 
+const resolveBrowserCandidates = async () => {
+  const configuredCandidates = Array.from(new Set(browserCandidates));
+  const existingCandidates: string[] = [];
+
+  for (const executablePath of configuredCandidates) {
+    if (await fs.access(executablePath).then(() => true).catch(() => false)) {
+      existingCandidates.push(executablePath);
+    }
+  }
+
+  return [...existingCandidates, undefined];
+};
+
 const escapeHtml = (value: string | number | undefined | null) =>
   String(value ?? "Not available")
     .replace(/&/g, "&amp;")
@@ -797,7 +810,7 @@ const buildReportHtml = (run: AnalysisRunView) => {
 };
 
 const launchPdfBrowser = async () => {
-  const candidates = browserCandidates.length > 0 ? browserCandidates : [undefined];
+  const candidates = await resolveBrowserCandidates();
   let lastError: unknown;
 
   for (const executablePath of candidates) {

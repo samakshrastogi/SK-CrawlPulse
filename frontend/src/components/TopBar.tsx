@@ -24,23 +24,23 @@ export function TopBar({
   const visibleNotifications = notifications.slice(0, 8);
 
   return (
-    <header className="app-navbar-shell premium-header glass-surface glass-hover hidden overflow-visible rounded-[1.5rem] px-4 py-3 md:block fade-in-up">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="brand-mark flex h-9 w-9 shrink-0 items-center justify-center rounded-[1.15rem] text-sm font-semibold text-white">
+    <header className="app-navbar-shell premium-header glass-surface glass-hover hidden overflow-visible rounded-[1rem] px-3 py-2 md:block fade-in-up">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="brand-mark flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.8rem] text-[11px] font-semibold text-white">
             SK
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.42em] text-cyan-300/95">SK CrawlPulse</p>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-cyan-300/95">SK CrawlPulse</p>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2">
+        <div className="flex shrink-0 items-center justify-end gap-1.5">
           <div className="relative">
             <button
               type="button"
               onClick={() => setNotificationsOpen((current) => !current)}
-              className="control-surface tab-motion flex h-9 w-9 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+              className="control-surface tab-motion flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
               aria-label="Notifications"
               aria-expanded={notificationsOpen}
             >
@@ -55,7 +55,7 @@ export function TopBar({
             </button>
 
             {notificationsOpen ? (
-              <div className="absolute right-0 top-11 z-[90] w-[380px] overflow-visible rounded-[1.1rem] border border-white/10 bg-slate-950/96 shadow-[0_24px_70px_rgba(2,6,23,0.5)] backdrop-blur-xl">
+              <div className="absolute right-0 top-9 z-[90] w-[360px] overflow-visible rounded-[1rem] border border-white/10 bg-slate-950/96 shadow-[0_24px_70px_rgba(2,6,23,0.5)] backdrop-blur-xl">
                 <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.18em] text-cyan-300">Notifications</p>
@@ -107,11 +107,11 @@ export function TopBar({
           <button
             type="button"
             onClick={onOpenProfile}
-            className="control-surface tab-motion flex h-10 w-10 items-center justify-center rounded-full p-1 text-slate-200 hover:bg-white/10"
+            className="control-surface tab-motion flex h-8 w-8 items-center justify-center rounded-full p-0.5 text-slate-200 hover:bg-white/10"
             aria-label="Open profile"
             title="Open profile"
           >
-            <span className="profile-mark flex h-7 min-w-7 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold text-white">
+            <span className="profile-mark flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[9px] font-semibold text-white">
               {initials}
             </span>
           </button>
